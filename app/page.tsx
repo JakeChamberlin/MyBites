@@ -36,7 +36,7 @@ const migratedOutdoorPositions: Record<number, { x: number; y: number }> = {
 
 const statusOptions: Array<{ state: ServiceState; label: string; shortLabel: string }> = [
   { state: "fresh", label: "Needs to be greeted", shortLabel: "GREET" },
-  { state: "late", label: "Send now", shortLabel: "SEND" },
+  { state: "late", label: "Ready to fly", shortLabel: "FLY" },
   { state: "critical", label: "Overdue", shortLabel: "OVERDUE" },
   { state: "plating", label: "Serving", shortLabel: "SERVING" },
   { state: "clear", label: "Clear", shortLabel: "CLEAR" },
@@ -428,7 +428,7 @@ export default function Home() {
             <div className="map-legend" aria-label="Table status legend">
               <span><i className="key greeting" /> Needs to be greeted</span>
               <span><i className="key critical" /> Overdue</span>
-              <span><i className="key late" /> Send now</span>
+              <span><i className="key late" /> Ready to fly</span>
               <span><i className="key plating" /> Serving</span>
               <span><i className="key clear" /> Clear</span>
             </div>
