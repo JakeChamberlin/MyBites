@@ -15,17 +15,17 @@ export async function generateMetadata(): Promise<Metadata> {
   const imageUrl = `${protocol}://${host}/og-custom.png`;
 
   return {
-    title: "Pass | Your Custom Restaurant Floor",
+    title: "MyBites",
     description: "Build your floor, move every table, and serve the right one at the right time.",
     openGraph: {
-      title: "Pass | Your Custom Restaurant Floor",
+      title: "MyBites",
       description: "Build your floor, move every table, and serve the right one at the right time.",
       type: "website",
-      images: [{ url: imageUrl, width: 1792, height: 938, alt: "Pass customizable restaurant floor dashboard" }],
+      images: [{ url: imageUrl, width: 1792, height: 938, alt: "MyBites restaurant floor dashboard" }],
     },
     twitter: {
       card: "summary_large_image",
-      title: "Pass | Your Custom Restaurant Floor",
+      title: "MyBites",
       description: "Build your floor, move every table, and serve the right one at the right time.",
       images: [imageUrl],
     },
