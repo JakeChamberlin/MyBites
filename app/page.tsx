@@ -65,6 +65,10 @@ function formatClock(date: Date) {
   return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
+function formatShiftLabel(date: Date) {
+  return `${date.toLocaleDateString([], { weekday: "long" })} dinner`;
+}
+
 function tableState(ticket: Ticket | undefined, tick: number) {
   if (!ticket) return "clear";
   if (ticket.status === "plating") return "plating";
@@ -404,7 +408,7 @@ export default function Home() {
     <main className="app-shell">
       <header className="topbar">
         <div className="brand"><img className="brand-logo" src="/mybites-logo.png" alt="" /><span>MyBites</span></div>
-        <div className={`shift-label sync-${syncStatus}`}><span className="live-dot" />Friday dinner · <span className="sync-copy">{syncStatus === "live" ? "Live on all devices" : syncStatus === "syncing" ? "Saving for everyone" : syncStatus === "offline" ? "Reconnecting" : "Connecting"}</span></div>
+        <div className={`shift-label sync-${syncStatus}`}><span className="live-dot" />{formatShiftLabel(clock)} · <span className="sync-copy">{syncStatus === "live" ? "Live on all devices" : syncStatus === "syncing" ? "Saving for everyone" : syncStatus === "offline" ? "Reconnecting" : "Connecting"}</span></div>
         <div className="top-stats">
           <div><span>Ready</span><strong>{readyTickets.length}</strong></div>
           <div><span>Oldest</span><strong className={longestWait >= 600 ? "overdue" : ""}>{formatTimer(longestWait)}</strong></div>
