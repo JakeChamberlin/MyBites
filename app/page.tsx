@@ -130,7 +130,7 @@ function readLegacyState() {
 export default function Home() {
   const [tickets, setTickets] = useState(initialTickets);
   const [selectedId, setSelectedId] = useState(0);
-  const [clock, setClock] = useState<Date>(() => new Date());
+  const [clock, setClock] = useState<Date | null>(null);
   const [tick, setTick] = useState(0);
   const [lastServed, setLastServed] = useState<Ticket | null>(null);
   const [floorTables, setFloorTables] = useState(defaultFloorTables);
@@ -166,6 +166,7 @@ export default function Home() {
   }
 
   useEffect(() => {
+    setClock(new Date());
     const interval = window.setInterval(() => {
       setTick((value) => value + 1);
       setClock(new Date());
@@ -247,6 +248,15 @@ export default function Home() {
   const readyTickets = visibleTickets.filter((ticket) => ticket.status === "ready").sort((a, b) => b.elapsedSeconds - a.elapsedSeconds);
   const visibleFloorTables = floorTables.filter((table) => table.area === activeArea);
   const areaReadyTickets = readyTickets.filter((ticket) => activeArea === "outdoor" ? ticket.zone === "Patio" : ticket.zone !== "Patio");
+  const manualReadyStatuses = Object.entries(statusOverrides).filter(([, status]) => status.state === "late" || status.state === "critical");
+  const areaManualReadyCount = manualReadyStatuses.filter(([objectKey]) => {
+    const [objectType, objectId] = objectKey.split(":");
+    if (objectType === "chair") return activeArea === "indoor";
+    const table = floorTables.find((candidate) => String(candidate.id) === objectId);
+    return table?.area === activeArea;
+  }).length;
+  const totalReadyCount = readyTickets.length + manualReadyStatuses.length;
+  const areaWaitingCount = areaReadyTickets.length + areaManualReadyCount;
   const selectedTable = floorTables.find((table) => table.id === selectedId);
   const selectedChair = barChairs.find((chair) => chair.id === selectedChairId);
   const selectedTicket = selectedChair
@@ -256,10 +266,10 @@ export default function Home() {
   const selectedOverride = selectedObjectKey ? statusOverrides[selectedObjectKey] : undefined;
   const selectedState = selectedOverride?.state ?? tableState(selectedTicket, 0);
   const selectedElapsed = selectedOverride
-    ? Math.max(0, Math.floor((clock.getTime() - selectedOverride.startedAt) / 1000))
+    ? Math.max(0, Math.floor(((clock?.getTime() ?? selectedOverride.startedAt) - selectedOverride.startedAt) / 1000))
     : selectedTicket?.elapsedSeconds ?? 0;
-  const manualWaits = Object.values(statusOverrides).filter((status) => status.state !== "clear" && status.state !== "plating").map((status) => Math.max(0, Math.floor((clock.getTime() - status.startedAt) / 1000)));
-  const longestWait = Math.max(readyTickets[0]?.elapsedSeconds ?? 0, ...manualWaits, 0);
+  const manualReadyWaits = manualReadyStatuses.map(([, status]) => Math.max(0, Math.floor(((clock?.getTime() ?? status.startedAt) - status.startedAt) / 1000)));
+  const longestWait = Math.max(readyTickets[0]?.elapsedSeconds ?? 0, ...manualReadyWaits, 0);
 
   function markServed(ticket: Ticket) {
     setTickets((current) => current.filter((item) => item.id !== ticket.id));
@@ -440,12 +450,12 @@ export default function Home() {
     <main className="app-shell">
       <header className="topbar">
         <div className="brand"><img className="brand-logo" src="/mybites-logo.png" alt="" /><span>MyBites</span></div>
-        <div className={`shift-label sync-${syncStatus}`}><span className="live-dot" />{formatShiftLabel(clock)} · <span className="sync-copy">{syncStatus === "live" ? "Live on all devices" : syncStatus === "syncing" ? "Saving for everyone" : syncStatus === "offline" ? "Reconnecting" : "Connecting"}</span></div>
+        <div className={`shift-label sync-${syncStatus}`}><span className="live-dot" />{clock ? formatShiftLabel(clock) : "Service"} · <span className="sync-copy">{syncStatus === "live" ? "Live on all devices" : syncStatus === "syncing" ? "Saving for everyone" : syncStatus === "offline" ? "Reconnecting" : "Connecting"}</span></div>
         <div className="top-stats">
-          <div><span>Ready</span><strong>{readyTickets.length}</strong></div>
+          <div><span>Ready to fly</span><strong>{totalReadyCount}</strong></div>
           <div><span>Oldest</span><strong className={longestWait >= 600 ? "overdue" : ""}>{formatTimer(longestWait)}</strong></div>
         </div>
-        <div className="clock">{formatClock(clock)}</div>
+        <div className="clock">{clock ? formatClock(clock) : "--:--"}</div>
       </header>
 
       <section className="workspace">
@@ -502,11 +512,11 @@ export default function Home() {
             >
               {activeArea === "indoor" ? <>
                 <div className="bar-fixture"><span>BAR</span></div>
-                <div className="pass-fixture"><span>Concord</span><strong>{areaReadyTickets.length}</strong><small>waiting</small></div>
+                <div className="pass-fixture"><span>Concord</span><strong>{areaWaitingCount}</strong><small>waiting</small></div>
                 <div className="photo-desk"><span>PHOTO DESK</span></div>
               </> : <>
                 <div className="floor-label patio-label">Outdoor patio</div>
-                <div className="patio-service"><span>Patio</span><strong>{areaReadyTickets.length}</strong><small>waiting</small></div>
+                <div className="patio-service"><span>Patio</span><strong>{areaWaitingCount}</strong><small>waiting</small></div>
                 <div className="patio-rail" />
                 <div className="plant plant-one">✦</div><div className="plant plant-two">✦</div><div className="plant plant-three">✦</div>
               </>}
@@ -519,7 +529,7 @@ export default function Home() {
                 const override = statusOverrides[`chair:${chair.id}`];
                 const state = override?.state ?? tableState(ticket, 0);
                 const elapsed = override
-                  ? Math.max(0, Math.floor((clock.getTime() - override.startedAt) / 1000))
+                  ? Math.max(0, Math.floor(((clock?.getTime() ?? override.startedAt) - override.startedAt) / 1000))
                   : ticket?.elapsedSeconds ?? 0;
                 return <button
                   key={chair.id}
