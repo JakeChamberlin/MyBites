@@ -10,6 +10,8 @@ import {
   type SharedFloorState,
   type StateOperation,
   type StatusOverride,
+  savedBarChairs,
+  savedFloorTables,
 } from "@/lib/live-state";
 
 type TicketStatus = "ready" | "plating";
@@ -100,6 +102,20 @@ function createObjectId() {
   return currentTimestamp() * 1000 + Math.floor(Math.random() * 1000);
 }
 
+function hasPreviousIndoorOrientation(state: SharedFloorState) {
+  const firstTable = state.floorTables.find((table) => table.id === 1);
+  const lastTable = state.floorTables.find((table) => table.id === 11);
+  const firstChair = state.barChairs.find((chair) => chair.id === 1);
+  return state.floorTables.length === 11
+    && state.barChairs.length === 10
+    && firstTable?.x === 72.5
+    && firstTable.y === 22.5
+    && lastTable?.x === 47.5
+    && lastTable.y === 87.5
+    && firstChair?.x === 82.5
+    && firstChair.y === 15;
+}
+
 function readLegacyState() {
   try {
     const floorTables = JSON.parse(window.localStorage.getItem("pass-floor-layout") ?? "[]") as FloorTable[];
@@ -176,6 +192,14 @@ export default function Home() {
             });
             if (bootstrapResponse.ok) sharedState = await bootstrapResponse.json() as SharedFloorState;
           }
+        }
+        if (initial && hasPreviousIndoorOrientation(sharedState)) {
+          const migrationResponse = await fetch("/api/state", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ type: "replaceLayout", floorTables: savedFloorTables, barChairs: savedBarChairs } satisfies StateOperation),
+          });
+          if (migrationResponse.ok) sharedState = await migrationResponse.json() as SharedFloorState;
         }
         if (!active) return;
         applyRemoteState(sharedState);
