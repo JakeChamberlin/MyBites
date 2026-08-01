@@ -39,6 +39,7 @@ export type StateOperation =
   | { type: "upsertChair"; chair: BarChair }
   | { type: "deleteChair"; chairId: number }
   | { type: "setStatus"; objectKey: string; status: StatusOverride }
+  | { type: "replaceLayout"; floorTables: FloorTable[]; barChairs: BarChair[] }
   | { type: "clearAll" }
   | { type: "bootstrap"; state: Pick<SharedFloorState, "floorTables" | "barChairs" | "statusOverrides"> };
 
@@ -109,6 +110,10 @@ export function applyStateOperation(state: SharedFloorState, operation: StateOpe
       break;
     case "setStatus":
       next.statusOverrides[operation.objectKey] = operation.status;
+      break;
+    case "replaceLayout":
+      next.floorTables = operation.floorTables;
+      next.barChairs = operation.barChairs;
       break;
     case "clearAll":
       next.floorTables = [];
