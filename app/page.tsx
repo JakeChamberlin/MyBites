@@ -1,18 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  type Area,
+  type BarChair,
+  type FloorTable,
+  type ServiceState,
+  type Shape,
+  type SharedFloorState,
+  type StateOperation,
+  type StatusOverride,
+} from "@/lib/live-state";
 
 type TicketStatus = "ready" | "plating";
 type Zone = "Dining room" | "Patio" | "Bar";
-type Shape = "round" | "square" | "booth";
-type Area = "indoor" | "outdoor";
-type ServiceState = "fresh" | "watch" | "late" | "critical" | "plating" | "clear";
-
-type StatusOverride = {
-  state: ServiceState;
-  startedAt: number;
-};
-
 const GRID_STEP = 2.5;
 const ALIGNMENT_THRESHOLD = 1.5;
 
@@ -23,24 +24,6 @@ type Ticket = {
   zone: Zone;
   elapsedSeconds: number;
   status: TicketStatus;
-};
-
-type FloorTable = {
-  id: number;
-  label: string;
-  x: number;
-  y: number;
-  shape: Shape;
-  seats: number;
-  area: Area;
-  rotation?: number;
-};
-
-type BarChair = {
-  id: number;
-  label: string;
-  x: number;
-  y: number;
 };
 
 const initialTickets: Ticket[] = [];
@@ -105,10 +88,29 @@ function snapToObjects(value: number, candidates: number[]) {
   return { value: nearest ?? snapToGrid(value), guide: nearest };
 }
 
+function currentTimestamp() {
+  return Date.now();
+}
+
+function createObjectId() {
+  return currentTimestamp() * 1000 + Math.floor(Math.random() * 1000);
+}
+
+function readLegacyState() {
+  try {
+    const floorTables = JSON.parse(window.localStorage.getItem("pass-floor-layout") ?? "[]") as FloorTable[];
+    const barChairs = JSON.parse(window.localStorage.getItem("pass-bar-chairs") ?? "[]") as BarChair[];
+    const statusOverrides = JSON.parse(window.localStorage.getItem("mybites-table-statuses") ?? "{}") as Record<string, StatusOverride>;
+    return { floorTables, barChairs, statusOverrides };
+  } catch {
+    return { floorTables: [], barChairs: [], statusOverrides: {} };
+  }
+}
+
 export default function Home() {
   const [tickets, setTickets] = useState(initialTickets);
   const [selectedId, setSelectedId] = useState(0);
-  const [clock, setClock] = useState<Date | null>(null);
+  const [clock, setClock] = useState<Date>(() => new Date());
   const [tick, setTick] = useState(0);
   const [lastServed, setLastServed] = useState<Ticket | null>(null);
   const [floorTables, setFloorTables] = useState(defaultFloorTables);
@@ -116,45 +118,34 @@ export default function Home() {
   const [statusOverrides, setStatusOverrides] = useState<Record<string, StatusOverride>>({});
   const [selectedChairId, setSelectedChairId] = useState<number | null>(null);
   const [editMode, setEditMode] = useState(false);
-  const [layoutLoaded, setLayoutLoaded] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<"connecting" | "live" | "syncing" | "offline">("connecting");
   const [addShape, setAddShape] = useState<Shape>("round");
   const [activeArea, setActiveArea] = useState<Area>("indoor");
   const [snapGuides, setSnapGuides] = useState<{ x: number | null; y: number | null }>({ x: null, y: null });
+  const floorTablesRef = useRef(floorTables);
+  const barChairsRef = useRef(barChairs);
+  const statusOverridesRef = useRef(statusOverrides);
+  const pendingMutationsRef = useRef(0);
+  const draggingRef = useRef(false);
+
+  function applyRemoteState(sharedState: SharedFloorState) {
+    if (draggingRef.current) return;
+    const migratedTables = sharedState.floorTables.map((table) => {
+      if (table.area) return table;
+      const outdoorPosition = migratedOutdoorPositions[table.id];
+      return { ...table, area: outdoorPosition ? "outdoor" as const : "indoor" as const, ...(outdoorPosition ?? {}) };
+    });
+    const migratedChairs = sharedState.barChairs.map((chair, index) => ({ ...chair, label: chair.label ?? `B${index + 1}` }));
+    const migratedStatuses = Object.fromEntries(Object.entries(sharedState.statusOverrides).map(([key, value]) => [key, value.state === "watch" ? { ...value, state: "late" as const } : value]));
+    floorTablesRef.current = migratedTables;
+    barChairsRef.current = migratedChairs;
+    statusOverridesRef.current = migratedStatuses;
+    setFloorTables(migratedTables);
+    setBarChairs(migratedChairs);
+    setStatusOverrides(migratedStatuses);
+  }
 
   useEffect(() => {
-    const savedLayout = window.localStorage.getItem("pass-floor-layout");
-    if (savedLayout) {
-      try {
-        const parsed = JSON.parse(savedLayout) as Array<Omit<FloorTable, "area"> & { area?: Area }>;
-        setFloorTables(parsed.map((table) => {
-          if (table.area) return table as FloorTable;
-          const outdoorPosition = migratedOutdoorPositions[table.id];
-          return { ...table, area: outdoorPosition ? "outdoor" : "indoor", ...(outdoorPosition ?? {}) };
-        }));
-      } catch {
-        window.localStorage.removeItem("pass-floor-layout");
-      }
-    }
-    const savedBarChairs = window.localStorage.getItem("pass-bar-chairs");
-    if (savedBarChairs) {
-      try {
-        const parsed = JSON.parse(savedBarChairs) as Array<Omit<BarChair, "label"> & { label?: string }>;
-        setBarChairs(parsed.map((chair, index) => ({ ...chair, label: chair.label ?? `B${index + 1}` })));
-      } catch {
-        window.localStorage.removeItem("pass-bar-chairs");
-      }
-    }
-    const savedStatuses = window.localStorage.getItem("mybites-table-statuses");
-    if (savedStatuses) {
-      try {
-        const parsed = JSON.parse(savedStatuses) as Record<string, StatusOverride>;
-        setStatusOverrides(Object.fromEntries(Object.entries(parsed).map(([key, value]) => [key, value.state === "watch" ? { ...value, state: "late" as const } : value])));
-      } catch {
-        window.localStorage.removeItem("mybites-table-statuses");
-      }
-    }
-    setLayoutLoaded(true);
-    setClock(new Date());
     const interval = window.setInterval(() => {
       setTick((value) => value + 1);
       setClock(new Date());
@@ -163,16 +154,58 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (layoutLoaded) window.localStorage.setItem("pass-floor-layout", JSON.stringify(floorTables));
-  }, [floorTables, layoutLoaded]);
+    let active = true;
 
-  useEffect(() => {
-    if (layoutLoaded) window.localStorage.setItem("pass-bar-chairs", JSON.stringify(barChairs));
-  }, [barChairs, layoutLoaded]);
+    async function refreshSharedState(initial = false) {
+      if (pendingMutationsRef.current > 0 || draggingRef.current) return;
+      try {
+        const response = await fetch("/api/state", { cache: "no-store" });
+        if (!response.ok) throw new Error("Shared floor unavailable");
+        let sharedState = await response.json() as SharedFloorState;
+        if (initial && sharedState.version === 0 && sharedState.floorTables.length === 0 && sharedState.barChairs.length === 0) {
+          const legacyState = readLegacyState();
+          if (legacyState.floorTables.length > 0 || legacyState.barChairs.length > 0 || Object.keys(legacyState.statusOverrides).length > 0) {
+            const bootstrapResponse = await fetch("/api/state", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ type: "bootstrap", state: legacyState } satisfies StateOperation),
+            });
+            if (bootstrapResponse.ok) sharedState = await bootstrapResponse.json() as SharedFloorState;
+          }
+        }
+        if (!active) return;
+        applyRemoteState(sharedState);
+        setSyncStatus("live");
+      } catch {
+        if (active) setSyncStatus("offline");
+      }
+    }
 
-  useEffect(() => {
-    if (layoutLoaded) window.localStorage.setItem("mybites-table-statuses", JSON.stringify(statusOverrides));
-  }, [statusOverrides, layoutLoaded]);
+    void refreshSharedState(true);
+    const interval = window.setInterval(() => void refreshSharedState(), 1000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  function commitOperation(operation: StateOperation) {
+    pendingMutationsRef.current += 1;
+    setSyncStatus("syncing");
+    void fetch("/api/state", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(operation),
+    }).then(async (response) => {
+      if (!response.ok) throw new Error("Update failed");
+      applyRemoteState(await response.json() as SharedFloorState);
+      setSyncStatus("live");
+    }).catch(() => {
+      setSyncStatus("offline");
+    }).finally(() => {
+      pendingMutationsRef.current = Math.max(0, pendingMutationsRef.current - 1);
+    });
+  }
 
   const visibleTickets = useMemo(() => tickets.map((ticket) => ({ ...ticket, elapsedSeconds: ticket.elapsedSeconds + tick })), [tickets, tick]);
   const readyTickets = visibleTickets.filter((ticket) => ticket.status === "ready").sort((a, b) => b.elapsedSeconds - a.elapsedSeconds);
@@ -187,11 +220,9 @@ export default function Home() {
   const selectedOverride = selectedObjectKey ? statusOverrides[selectedObjectKey] : undefined;
   const selectedState = selectedOverride?.state ?? tableState(selectedTicket, 0);
   const selectedElapsed = selectedOverride
-    ? Math.max(0, Math.floor(((clock?.getTime() ?? selectedOverride.startedAt) - selectedOverride.startedAt) / 1000))
+    ? Math.max(0, Math.floor((clock.getTime() - selectedOverride.startedAt) / 1000))
     : selectedTicket?.elapsedSeconds ?? 0;
-  const manualWaits = clock
-    ? Object.values(statusOverrides).filter((status) => status.state !== "clear" && status.state !== "plating").map((status) => Math.max(0, Math.floor((clock.getTime() - status.startedAt) / 1000)))
-    : [];
+  const manualWaits = Object.values(statusOverrides).filter((status) => status.state !== "clear" && status.state !== "plating").map((status) => Math.max(0, Math.floor((clock.getTime() - status.startedAt) / 1000)));
   const longestWait = Math.max(readyTickets[0]?.elapsedSeconds ?? 0, ...manualWaits, 0);
 
   function markServed(ticket: Ticket) {
@@ -211,59 +242,79 @@ export default function Home() {
   }
 
   function addTable() {
-    const nextId = Math.max(...floorTables.map((table) => table.id), 0) + 1;
-    const nextLabel = `${Math.max(...floorTables.map((table) => Number.parseInt(table.label, 10) || 0), 0) + 1}`;
+    const nextId = createObjectId();
+    const nextLabel = `${Math.max(...floorTablesRef.current.map((table) => Number.parseInt(table.label, 10) || 0), 0) + 1}`;
     const table: FloorTable = { id: nextId, label: nextLabel, x: 50, y: 50, shape: addShape, seats: addShape === "round" ? 2 : addShape === "booth" ? 6 : 4, area: activeArea };
-    setFloorTables((current) => [...current, table]);
+    floorTablesRef.current = [...floorTablesRef.current, table];
+    setFloorTables(floorTablesRef.current);
+    commitOperation({ type: "upsertTable", table });
     setSelectedId(nextId);
     setSelectedChairId(null);
   }
 
   function addBarChair() {
-    const nextId = Math.max(...barChairs.map((chair) => chair.id), 0) + 1;
-    const nextNumber = Math.max(...barChairs.map((chair) => Number.parseInt(chair.label.replace(/\D/g, ""), 10) || 0), 0) + 1;
+    const nextId = createObjectId();
+    const nextNumber = Math.max(...barChairsRef.current.map((chair) => Number.parseInt(chair.label.replace(/\D/g, ""), 10) || 0), 0) + 1;
     const chair: BarChair = { id: nextId, label: `B${nextNumber}`, x: 82, y: 50 };
-    setBarChairs((current) => [...current, chair]);
+    barChairsRef.current = [...barChairsRef.current, chair];
+    setBarChairs(barChairsRef.current);
+    commitOperation({ type: "upsertChair", chair });
     setSelectedChairId(nextId);
     setSelectedId(0);
   }
 
   function removeSelectedChair() {
     if (selectedChairId === null) return;
-    setBarChairs((current) => current.filter((chair) => chair.id !== selectedChairId));
-    setStatusOverrides((current) => {
-      const next = { ...current };
-      delete next[`chair:${selectedChairId}`];
-      return next;
-    });
+    barChairsRef.current = barChairsRef.current.filter((chair) => chair.id !== selectedChairId);
+    setBarChairs(barChairsRef.current);
+    const nextStatuses = { ...statusOverridesRef.current };
+    delete nextStatuses[`chair:${selectedChairId}`];
+    statusOverridesRef.current = nextStatuses;
+    setStatusOverrides(nextStatuses);
+    commitOperation({ type: "deleteChair", chairId: selectedChairId });
     setSelectedChairId(null);
   }
 
   function updateSelectedTable(changes: Partial<FloorTable>) {
-    setFloorTables((current) => current.map((table) => table.id === selectedId ? { ...table, ...changes } : table));
+    const table = floorTablesRef.current.find((item) => item.id === selectedId);
+    if (!table) return;
+    const updatedTable = { ...table, ...changes };
+    floorTablesRef.current = floorTablesRef.current.map((item) => item.id === selectedId ? updatedTable : item);
+    setFloorTables(floorTablesRef.current);
+    commitOperation({ type: "upsertTable", table: updatedTable });
   }
 
   function updateSelectedChair(changes: Partial<BarChair>) {
-    setBarChairs((current) => current.map((chair) => chair.id === selectedChairId ? { ...chair, ...changes } : chair));
+    const chair = barChairsRef.current.find((item) => item.id === selectedChairId);
+    if (!chair) return;
+    const updatedChair = { ...chair, ...changes };
+    barChairsRef.current = barChairsRef.current.map((item) => item.id === selectedChairId ? updatedChair : item);
+    setBarChairs(barChairsRef.current);
+    commitOperation({ type: "upsertChair", chair: updatedChair });
   }
 
   function removeSelectedTable() {
     if (!selectedTable || !window.confirm(`Remove table ${selectedTable.label} from this floor layout?`)) return;
-    setFloorTables((current) => current.filter((table) => table.id !== selectedId));
+    floorTablesRef.current = floorTablesRef.current.filter((table) => table.id !== selectedId);
+    setFloorTables(floorTablesRef.current);
     setTickets((current) => current.filter((ticket) => ticket.id !== selectedId));
-    setStatusOverrides((current) => {
-      const next = { ...current };
-      delete next[`table:${selectedId}`];
-      return next;
-    });
-    setSelectedId(floorTables.find((table) => table.id !== selectedId)?.id ?? 0);
+    const nextStatuses = { ...statusOverridesRef.current };
+    delete nextStatuses[`table:${selectedId}`];
+    statusOverridesRef.current = nextStatuses;
+    setStatusOverrides(nextStatuses);
+    commitOperation({ type: "deleteTable", tableId: selectedId });
+    setSelectedId(floorTablesRef.current[0]?.id ?? 0);
   }
 
   function resetLayout() {
     if (!window.confirm("Clear all tables and bar chairs from the floor layout?")) return;
-    setFloorTables(defaultFloorTables);
-    setBarChairs(defaultBarChairs);
-    setStatusOverrides({});
+    floorTablesRef.current = defaultFloorTables;
+    barChairsRef.current = defaultBarChairs;
+    statusOverridesRef.current = {};
+    setFloorTables(floorTablesRef.current);
+    setBarChairs(barChairsRef.current);
+    setStatusOverrides(statusOverridesRef.current);
+    commitOperation({ type: "clearAll" });
     setSelectedId(0);
     setSelectedChairId(null);
   }
@@ -271,8 +322,7 @@ export default function Home() {
   function switchArea(area: Area) {
     setActiveArea(area);
     setSelectedChairId(null);
-    const firstTable = floorTables.find((table) => table.area === area);
-    setSelectedId(firstTable?.id ?? 0);
+    setSelectedId(0);
   }
 
   function selectTicket(ticket: Ticket) {
@@ -291,7 +341,10 @@ export default function Home() {
 
   function setSelectedStatus(state: ServiceState) {
     if (!selectedObjectKey) return;
-    setStatusOverrides((current) => ({ ...current, [selectedObjectKey]: { state, startedAt: Date.now() } }));
+    const status = { state, startedAt: currentTimestamp() };
+    statusOverridesRef.current = { ...statusOverridesRef.current, [selectedObjectKey]: status };
+    setStatusOverrides(statusOverridesRef.current);
+    commitOperation({ type: "setStatus", objectKey: selectedObjectKey, status });
   }
 
   function moveTable(event: React.PointerEvent<HTMLButtonElement>, tableId: number) {
@@ -310,7 +363,8 @@ export default function Home() {
     const x = clamp(snappedX.value, 5, 95);
     const y = clamp(snappedY.value, 7.5, 92.5);
     setSnapGuides({ x: snappedX.guide, y: snappedY.guide });
-    setFloorTables((current) => current.map((table) => table.id === tableId ? { ...table, x, y } : table));
+    floorTablesRef.current = floorTablesRef.current.map((table) => table.id === tableId ? { ...table, x, y } : table);
+    setFloorTables(floorTablesRef.current);
   }
 
   function moveBarChair(event: React.PointerEvent<HTMLButtonElement>, chairId: number) {
@@ -329,23 +383,33 @@ export default function Home() {
     const x = clamp(snappedX.value, 2.5, 97.5);
     const y = clamp(snappedY.value, 2.5, 97.5);
     setSnapGuides({ x: snappedX.guide, y: snappedY.guide });
-    setBarChairs((current) => current.map((chair) => chair.id === chairId ? { ...chair, x, y } : chair));
+    barChairsRef.current = barChairsRef.current.map((chair) => chair.id === chairId ? { ...chair, x, y } : chair);
+    setBarChairs(barChairsRef.current);
   }
 
-  function finishMoving() {
+  function finishMoving(type?: "table" | "chair", id?: number) {
+    draggingRef.current = false;
     setSnapGuides({ x: null, y: null });
+    if (type === "table") {
+      const table = floorTablesRef.current.find((item) => item.id === id);
+      if (table) commitOperation({ type: "upsertTable", table });
+    }
+    if (type === "chair") {
+      const chair = barChairsRef.current.find((item) => item.id === id);
+      if (chair) commitOperation({ type: "upsertChair", chair });
+    }
   }
 
   return (
     <main className="app-shell">
       <header className="topbar">
         <div className="brand"><img className="brand-logo" src="/mybites-logo.png" alt="" /><span>MyBites</span></div>
-        <div className="shift-label"><span className="live-dot" />Friday dinner · Live floor</div>
+        <div className={`shift-label sync-${syncStatus}`}><span className="live-dot" />Friday dinner · <span className="sync-copy">{syncStatus === "live" ? "Live on all devices" : syncStatus === "syncing" ? "Saving for everyone" : syncStatus === "offline" ? "Reconnecting" : "Connecting"}</span></div>
         <div className="top-stats">
           <div><span>Ready</span><strong>{readyTickets.length}</strong></div>
           <div><span>Oldest</span><strong className={longestWait >= 600 ? "overdue" : ""}>{formatTimer(longestWait)}</strong></div>
         </div>
-        <div className="clock">{clock ? formatClock(clock) : "--:--"}</div>
+        <div className="clock">{formatClock(clock)}</div>
       </header>
 
       <section className="workspace">
@@ -420,7 +484,7 @@ export default function Home() {
                 const override = statusOverrides[`chair:${chair.id}`];
                 const state = override?.state ?? tableState(ticket, 0);
                 const elapsed = override
-                  ? Math.max(0, Math.floor(((clock?.getTime() ?? override.startedAt) - override.startedAt) / 1000))
+                  ? Math.max(0, Math.floor((clock.getTime() - override.startedAt) / 1000))
                   : ticket?.elapsedSeconds ?? 0;
                 return <button
                   key={chair.id}
@@ -437,15 +501,16 @@ export default function Home() {
                   onPointerDown={(event) => {
                     if (!editMode) return;
                     event.preventDefault();
+                    draggingRef.current = true;
                     event.currentTarget.dataset.dragged = "false";
                     event.currentTarget.setPointerCapture(event.pointerId);
                   }}
                   onPointerMove={(event) => moveBarChair(event, chair.id)}
                   onPointerUp={(event) => {
                     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-                    finishMoving();
+                    finishMoving("chair", chair.id);
                   }}
-                  onPointerCancel={finishMoving}
+                  onPointerCancel={() => finishMoving()}
                   aria-label={`Bar seat ${chair.label}, ${ticket ? state : "clear"}${editMode ? ", drag to move" : ""}`}
                   aria-pressed={selectedChairId === chair.id}
                   data-editing={editMode ? "true" : "false"}
@@ -473,15 +538,16 @@ export default function Home() {
                     onPointerDown={(event) => {
                       if (!editMode) return;
                       event.preventDefault();
+                      draggingRef.current = true;
                       event.currentTarget.dataset.dragged = "false";
                       event.currentTarget.setPointerCapture(event.pointerId);
                     }}
                     onPointerMove={(event) => moveTable(event, table.id)}
                     onPointerUp={(event) => {
                       if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-                      finishMoving();
+                      finishMoving("table", table.id);
                     }}
-                    onPointerCancel={finishMoving}
+                    onPointerCancel={() => finishMoving()}
                     aria-label={`Table ${table.label}, ${statusLabel(state)}`}
                     aria-pressed={selected}
                     data-editing={editMode ? "true" : "false"}
@@ -493,6 +559,45 @@ export default function Home() {
                   </button>
                 );
               })}
+
+              {selectedObjectKey && (selectedTable || selectedChair) && <section
+                className={`selected-panel selection-dialog floor-popover ${((selectedTable?.x ?? selectedChair?.x ?? 50) > 58) ? "opens-left" : "opens-right"}`}
+                role="dialog"
+                aria-label={`Table ${selectedTable?.label ?? selectedChair?.label} details`}
+                style={{
+                  left: `clamp(200px, calc(${selectedTable?.x ?? selectedChair?.x ?? 50}% + ${((selectedTable?.x ?? selectedChair?.x ?? 50) > 58) ? -220 : 220}px), calc(100% - 200px))`,
+                  top: `clamp(185px, ${selectedTable?.y ?? selectedChair?.y ?? 50}%, calc(100% - 185px))`,
+                }}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <button className="dialog-close" onClick={() => { setSelectedId(0); setSelectedChairId(null); }} aria-label="Close table details">×</button>
+                <div className="selected-header">
+                  <div><p>Selected table</p><h2>{selectedTable?.label ?? selectedChair?.label ?? "—"}</h2></div>
+                  <span className={`status-chip ${selectedState}`}>{statusLabel(selectedState)}{selectedState !== "clear" && ` · ${formatTimer(selectedElapsed)}`}</span>
+                </div>
+                <div className="status-picker" aria-label="Set table status">
+                  <strong>Set status</strong>
+                  <div>{statusOptions.map((option) => <button key={option.state} className={`status-option ${option.state}${selectedState === option.state ? " active" : ""}`} onClick={() => setSelectedStatus(option.state)} aria-pressed={selectedState === option.state}><i />{option.label}</button>)}</div>
+                </div>
+                {editMode && selectedTable && <div className="table-editor">
+                  <label>Table name<input value={selectedTable.label} maxLength={4} onChange={(event) => updateSelectedTable({ label: event.target.value })} /></label>
+                  <label>Seats<select value={selectedTable.seats} onChange={(event) => updateSelectedTable({ seats: Number(event.target.value) })}><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="6">6</option><option value="8">8</option></select></label>
+                  <label>Shape<select value={selectedTable.shape} onChange={(event) => updateSelectedTable({ shape: event.target.value as Shape })}><option value="round">Round</option><option value="square">Square</option><option value="booth">Booth</option></select></label>
+                  <label>Area<select value={selectedTable.area} onChange={(event) => { const area = event.target.value as Area; updateSelectedTable({ area }); setActiveArea(area); }}><option value="indoor">Indoor</option><option value="outdoor">Outdoor</option></select></label>
+                  <button className="remove-table" onClick={removeSelectedTable}>Remove table</button>
+                  <p>Changes save automatically for everyone.</p>
+                </div>}
+                {editMode && selectedChair && <div className="table-editor chair-editor">
+                  <label>Bar seat name<input value={selectedChair.label} maxLength={4} onChange={(event) => updateSelectedChair({ label: event.target.value })} /></label>
+                  <button className="remove-table" onClick={removeSelectedChair}>Remove chair</button>
+                  <p>Chair positions and names save automatically for everyone.</p>
+                </div>}
+                {selectedState !== "clear" ? <>
+                  {selectedTicket && <div className="selected-meta"><span>{selectedTicket.guests} guests</span><span>{selectedTicket.zone}</span></div>}
+                  {!selectedTicket && <div className="manual-status-summary"><strong>{statusLabel(selectedState)}</strong><span>Status set for this table</span></div>}
+                  {selectedTicket && (selectedTicket.status === "ready" ? <button className="primary-action" onClick={() => markServed(selectedTicket)}>✓ Mark table served</button> : <button className="primary-action plating-action" onClick={() => markReady(selectedTicket.id)}>Move to ready</button>)}
+                </> : <div className="clear-table"><span>✓</span><h3>Table is clear</h3><p>No service tasks are waiting for this table.</p></div>}
+              </section>}
             </section>
           </div>
         </div>
@@ -511,38 +616,6 @@ export default function Home() {
           </section>
         </aside>}
       </section>
-
-      {selectedObjectKey && <div className="selection-backdrop" onClick={() => { setSelectedId(0); setSelectedChairId(null); }}>
-          <section className="selected-panel selection-dialog" role="dialog" aria-modal="true" aria-label={`Table ${selectedTable?.label ?? selectedChair?.label} details`} onClick={(event) => event.stopPropagation()}>
-            <button className="dialog-close" onClick={() => { setSelectedId(0); setSelectedChairId(null); }} aria-label="Close table details">×</button>
-            <div className="selected-header">
-              <div><p>Selected table</p><h2>{selectedTable?.label ?? selectedChair?.label ?? "—"}</h2></div>
-              {selectedObjectKey && <span className={`status-chip ${selectedState}`}>{statusLabel(selectedState)}{selectedState !== "clear" && ` · ${formatTimer(selectedElapsed)}`}</span>}
-            </div>
-            {selectedObjectKey && <div className="status-picker" aria-label="Set table status">
-              <strong>Set status</strong>
-              <div>{statusOptions.map((option) => <button key={option.state} className={`status-option ${option.state}${selectedState === option.state ? " active" : ""}`} onClick={() => setSelectedStatus(option.state)} aria-pressed={selectedState === option.state}><i />{option.label}</button>)}</div>
-            </div>}
-            {editMode && selectedTable && <div className="table-editor">
-              <label>Table name<input value={selectedTable.label} maxLength={4} onChange={(event) => updateSelectedTable({ label: event.target.value })} /></label>
-              <label>Seats<select value={selectedTable.seats} onChange={(event) => updateSelectedTable({ seats: Number(event.target.value) })}><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="6">6</option><option value="8">8</option></select></label>
-              <label>Shape<select value={selectedTable.shape} onChange={(event) => updateSelectedTable({ shape: event.target.value as Shape })}><option value="round">Round</option><option value="square">Square</option><option value="booth">Booth</option></select></label>
-              <label>Area<select value={selectedTable.area} onChange={(event) => { const area = event.target.value as Area; updateSelectedTable({ area }); setActiveArea(area); }}><option value="indoor">Indoor</option><option value="outdoor">Outdoor</option></select></label>
-              <button className="remove-table" onClick={removeSelectedTable}>Remove table</button>
-              <p>Changes save automatically on this device.</p>
-            </div>}
-            {editMode && selectedChair && <div className="table-editor chair-editor">
-              <label>Bar seat name<input value={selectedChair.label} maxLength={4} onChange={(event) => updateSelectedChair({ label: event.target.value })} /></label>
-              <button className="remove-table" onClick={removeSelectedChair}>Remove chair</button>
-              <p>Chair positions and names save automatically.</p>
-            </div>}
-            {selectedState !== "clear" ? <>
-              {selectedTicket && <div className="selected-meta"><span>{selectedTicket.guests} guests</span><span>{selectedTicket.zone}</span></div>}
-              {!selectedTicket && <div className="manual-status-summary"><strong>{statusLabel(selectedState)}</strong><span>Status set for this table</span></div>}
-              {selectedTicket && (selectedTicket.status === "ready" ? <button className="primary-action" onClick={() => markServed(selectedTicket)}>✓ Mark table served</button> : <button className="primary-action plating-action" onClick={() => markReady(selectedTicket.id)}>Move to ready</button>)}
-            </> : <div className="clear-table"><span>✓</span><h3>Table is clear</h3><p>No service tasks are waiting for this table.</p></div>}
-          </section>
-      </div>}
 
       {lastServed && <div className="toast" role="status"><span>Table {lastServed.table} served</span><button onClick={undoServed}>Undo</button><button className="toast-close" onClick={() => setLastServed(null)}>×</button></div>}
     </main>
