@@ -515,7 +515,6 @@ export default function Home() {
                 <div className="pass-fixture"><span>Indoor</span><strong>{areaWaitingCount}</strong><small>waiting</small></div>
                 <div className="photo-desk"><span>PHOTO DESK</span></div>
               </> : <>
-                <div className="floor-label patio-label">Outdoor patio</div>
                 <div className="patio-service"><span>Patio</span><strong>{areaWaitingCount}</strong><small>waiting</small></div>
                 <div className="patio-rail" />
                 <div className="plant plant-one">✦</div><div className="plant plant-two">✦</div><div className="plant plant-three">✦</div>
