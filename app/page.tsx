@@ -248,7 +248,7 @@ export default function Home() {
   function addTable() {
     const nextId = createObjectId();
     const nextLabel = `${Math.max(...floorTablesRef.current.map((table) => Number.parseInt(table.label, 10) || 0), 0) + 1}`;
-    const table: FloorTable = { id: nextId, label: nextLabel, x: 50, y: 50, shape: addShape, seats: addShape === "round" ? 2 : addShape === "booth" ? 6 : 4, area: activeArea };
+    const table: FloorTable = { id: nextId, label: nextLabel, x: 50, y: 50, shape: addShape, seats: addShape === "round" ? 2 : addShape === "booth" ? 6 : 4, area: activeArea, rotation: activeArea === "indoor" ? 90 : 0 };
     floorTablesRef.current = [...floorTablesRef.current, table];
     setFloorTables(floorTablesRef.current);
     commitOperation({ type: "upsertTable", table });
@@ -259,7 +259,7 @@ export default function Home() {
   function addBarChair() {
     const nextId = createObjectId();
     const nextNumber = Math.max(...barChairsRef.current.map((chair) => Number.parseInt(chair.label.replace(/\D/g, ""), 10) || 0), 0) + 1;
-    const chair: BarChair = { id: nextId, label: `B${nextNumber}`, x: 82, y: 50 };
+    const chair: BarChair = { id: nextId, label: `B${nextNumber}`, x: 50, y: 82.5 };
     barChairsRef.current = [...barChairsRef.current, chair];
     setBarChairs(barChairsRef.current);
     commitOperation({ type: "upsertChair", chair });
@@ -530,7 +530,12 @@ export default function Home() {
                   <button
                     key={table.id}
                     className={`floor-table ${table.shape} state-${state}${selected ? " selected" : ""}`}
-                    style={{ left: `${table.x}%`, top: `${table.y}%`, transform: `translate(-50%, -50%) rotate(${table.rotation ?? 0}deg)` }}
+                    style={{
+                      left: `${table.x}%`,
+                      top: `${table.y}%`,
+                      transform: `translate(-50%, -50%) rotate(${table.rotation ?? 0}deg)`,
+                      "--table-counter-rotation": `${-(table.rotation ?? 0)}deg`,
+                    } as React.CSSProperties & Record<"--table-counter-rotation", string>}
                     onClick={(event) => {
                       if (event.currentTarget.dataset.dragged === "true") {
                         event.currentTarget.dataset.dragged = "false";
@@ -558,8 +563,10 @@ export default function Home() {
                   >
                     <span className="chair chair-a" /><span className="chair chair-b" />
                     {table.seats >= 4 && <><span className="chair chair-c" /><span className="chair chair-d" /></>}
-                    <span className="table-number">{table.label}</span>
-                    <span className="table-time">{override ? shortStatusLabel(state) : ticket ? ticket.status === "plating" ? "SERVING" : formatTimer(ticket.elapsedSeconds) : "CLEAR"}</span>
+                    <span className="table-copy">
+                      <span className="table-number">{table.label}</span>
+                      <span className="table-time">{override ? shortStatusLabel(state) : ticket ? ticket.status === "plating" ? "SERVING" : formatTimer(ticket.elapsedSeconds) : "CLEAR"}</span>
+                    </span>
                   </button>
                 );
               })}
