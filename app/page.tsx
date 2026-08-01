@@ -296,6 +296,7 @@ export default function Home() {
 
   function moveTable(event: React.PointerEvent<HTMLButtonElement>, tableId: number) {
     if (!editMode || !event.currentTarget.hasPointerCapture(event.pointerId)) return;
+    event.currentTarget.dataset.dragged = "true";
     const floor = event.currentTarget.parentElement?.getBoundingClientRect();
     if (!floor) return;
     const rawX = ((event.clientX - floor.left) / floor.width) * 100;
@@ -314,6 +315,7 @@ export default function Home() {
 
   function moveBarChair(event: React.PointerEvent<HTMLButtonElement>, chairId: number) {
     if (!editMode || !event.currentTarget.hasPointerCapture(event.pointerId)) return;
+    event.currentTarget.dataset.dragged = "true";
     const floor = event.currentTarget.parentElement?.getBoundingClientRect();
     if (!floor) return;
     const rawX = ((event.clientX - floor.left) / floor.width) * 100;
@@ -424,15 +426,18 @@ export default function Home() {
                   key={chair.id}
                   className={`bar-chair state-${state}${selectedChairId === chair.id ? " selected" : ""}`}
                   style={{ left: `${chair.x}%`, top: `${chair.y}%` }}
-                  onClick={() => {
+                  onClick={(event) => {
+                    if (event.currentTarget.dataset.dragged === "true") {
+                      event.currentTarget.dataset.dragged = "false";
+                      return;
+                    }
                     setSelectedChairId(chair.id);
                     setSelectedId(0);
                   }}
                   onPointerDown={(event) => {
                     if (!editMode) return;
                     event.preventDefault();
-                    setSelectedChairId(chair.id);
-                    setSelectedId(0);
+                    event.currentTarget.dataset.dragged = "false";
                     event.currentTarget.setPointerCapture(event.pointerId);
                   }}
                   onPointerMove={(event) => moveBarChair(event, chair.id)}
@@ -457,12 +462,18 @@ export default function Home() {
                     key={table.id}
                     className={`floor-table ${table.shape} state-${state}${selected ? " selected" : ""}`}
                     style={{ left: `${table.x}%`, top: `${table.y}%`, transform: `translate(-50%, -50%) rotate(${table.rotation ?? 0}deg)` }}
-                    onClick={() => { setSelectedId(table.id); setSelectedChairId(null); }}
+                    onClick={(event) => {
+                      if (event.currentTarget.dataset.dragged === "true") {
+                        event.currentTarget.dataset.dragged = "false";
+                        return;
+                      }
+                      setSelectedId(table.id);
+                      setSelectedChairId(null);
+                    }}
                     onPointerDown={(event) => {
                       if (!editMode) return;
                       event.preventDefault();
-                      setSelectedId(table.id);
-                      setSelectedChairId(null);
+                      event.currentTarget.dataset.dragged = "false";
                       event.currentTarget.setPointerCapture(event.pointerId);
                     }}
                     onPointerMove={(event) => moveTable(event, table.id)}
@@ -486,8 +497,24 @@ export default function Home() {
           </div>
         </div>
 
-        <aside className="service-rail">
-          <section className="selected-panel" aria-live="polite">
+        {activeArea === "outdoor" && <aside className="service-rail">
+          <section className="runner-queue">
+            <div className="rail-heading"><div><p className="eyebrow">{activeArea} runner queue</p><h2>Ready now</h2></div><span>{areaReadyTickets.length}</span></div>
+            <div className="queue-list">
+              {areaReadyTickets.map((ticket, index) => <button key={ticket.id} className={`queue-item ${(selectedTicket?.id === ticket.id) ? "active" : ""}`} onClick={() => selectTicket(ticket)}>
+                <span className="queue-rank">{index + 1}</span>
+                <span className="queue-table"><small>Table</small><strong>{ticket.table}</strong></span>
+                <span className="queue-status">{ticket.status === "plating" ? "Serving" : "Service needed"}<small>{ticket.guests} guests · {ticket.zone}</small></span>
+                <strong className={`queue-time ${urgency(ticket.elapsedSeconds)}`}>{formatTimer(ticket.elapsedSeconds)}</strong>
+              </button>)}
+            </div>
+          </section>
+        </aside>}
+      </section>
+
+      {selectedObjectKey && <div className="selection-backdrop" onClick={() => { setSelectedId(0); setSelectedChairId(null); }}>
+          <section className="selected-panel selection-dialog" role="dialog" aria-modal="true" aria-label={`Table ${selectedTable?.label ?? selectedChair?.label} details`} onClick={(event) => event.stopPropagation()}>
+            <button className="dialog-close" onClick={() => { setSelectedId(0); setSelectedChairId(null); }} aria-label="Close table details">×</button>
             <div className="selected-header">
               <div><p>Selected table</p><h2>{selectedTable?.label ?? selectedChair?.label ?? "—"}</h2></div>
               {selectedObjectKey && <span className={`status-chip ${selectedState}`}>{statusLabel(selectedState)}{selectedState !== "clear" && ` · ${formatTimer(selectedElapsed)}`}</span>}
@@ -515,20 +542,7 @@ export default function Home() {
               {selectedTicket && (selectedTicket.status === "ready" ? <button className="primary-action" onClick={() => markServed(selectedTicket)}>✓ Mark table served</button> : <button className="primary-action plating-action" onClick={() => markReady(selectedTicket.id)}>Move to ready</button>)}
             </> : <div className="clear-table"><span>✓</span><h3>Table is clear</h3><p>No service tasks are waiting for this table.</p></div>}
           </section>
-
-          {activeArea === "outdoor" && <section className="runner-queue">
-            <div className="rail-heading"><div><p className="eyebrow">{activeArea} runner queue</p><h2>Ready now</h2></div><span>{areaReadyTickets.length}</span></div>
-            <div className="queue-list">
-              {areaReadyTickets.map((ticket, index) => <button key={ticket.id} className={`queue-item ${(selectedTicket?.id === ticket.id) ? "active" : ""}`} onClick={() => selectTicket(ticket)}>
-                <span className="queue-rank">{index + 1}</span>
-                <span className="queue-table"><small>Table</small><strong>{ticket.table}</strong></span>
-                <span className="queue-status">{ticket.status === "plating" ? "Serving" : "Service needed"}<small>{ticket.guests} guests · {ticket.zone}</small></span>
-                <strong className={`queue-time ${urgency(ticket.elapsedSeconds)}`}>{formatTimer(ticket.elapsedSeconds)}</strong>
-              </button>)}
-            </div>
-          </section>}
-        </aside>
-      </section>
+      </div>}
 
       {lastServed && <div className="toast" role="status"><span>Table {lastServed.table} served</span><button onClick={undoServed}>Undo</button><button className="toast-close" onClick={() => setLastServed(null)}>×</button></div>}
     </main>
