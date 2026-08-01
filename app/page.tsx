@@ -103,9 +103,9 @@ function createObjectId() {
 }
 
 function hasPreviousIndoorOrientation(state: SharedFloorState) {
-  const firstTable = state.floorTables.find((table) => table.id === 1);
-  const lastTable = state.floorTables.find((table) => table.id === 11);
-  const firstChair = state.barChairs.find((chair) => chair.id === 1);
+  const firstTable = state.floorTables.find((table) => table.label === "1");
+  const lastTable = state.floorTables.find((table) => table.label === "11");
+  const firstChair = state.barChairs.find((chair) => chair.label === "B1");
   return state.floorTables.length === 11
     && state.barChairs.length === 10
     && firstTable?.x === 72.5
@@ -194,10 +194,18 @@ export default function Home() {
           }
         }
         if (initial && hasPreviousIndoorOrientation(sharedState)) {
+          const migratedFloorTables = sharedState.floorTables.map((table) => {
+            const savedTable = savedFloorTables.find((candidate) => candidate.label === table.label);
+            return savedTable ? { ...table, x: savedTable.x, y: savedTable.y, rotation: savedTable.rotation } : table;
+          });
+          const migratedBarChairs = sharedState.barChairs.map((chair) => {
+            const savedChair = savedBarChairs.find((candidate) => candidate.label === chair.label);
+            return savedChair ? { ...chair, x: savedChair.x, y: savedChair.y } : chair;
+          });
           const migrationResponse = await fetch("/api/state", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ type: "replaceLayout", floorTables: savedFloorTables, barChairs: savedBarChairs } satisfies StateOperation),
+            body: JSON.stringify({ type: "replaceLayout", floorTables: migratedFloorTables, barChairs: migratedBarChairs } satisfies StateOperation),
           });
           if (migrationResponse.ok) sharedState = await migrationResponse.json() as SharedFloorState;
         }
