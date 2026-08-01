@@ -501,7 +501,6 @@ export default function Home() {
               }}
             >
               {activeArea === "indoor" ? <>
-                <div className="floor-label dining-label">Main dining</div>
                 <div className="bar-fixture"><span>BAR</span></div>
                 <div className="pass-fixture"><span>Concord</span><strong>{areaReadyTickets.length}</strong><small>waiting</small></div>
                 <div className="photo-desk"><span>PHOTO DESK</span></div>
