@@ -512,7 +512,7 @@ export default function Home() {
             >
               {activeArea === "indoor" ? <>
                 <div className="bar-fixture"><span>BAR</span></div>
-                <div className="pass-fixture"><span>Concord</span><strong>{areaWaitingCount}</strong><small>waiting</small></div>
+                <div className="pass-fixture"><span>Indoor</span><strong>{areaWaitingCount}</strong><small>waiting</small></div>
                 <div className="photo-desk"><span>PHOTO DESK</span></div>
               </> : <>
                 <div className="floor-label patio-label">Outdoor patio</div>
