@@ -250,12 +250,16 @@ export default function Home() {
   const visibleFloorTables = floorTables.filter((table) => table.area === activeArea);
   const areaReadyTickets = readyTickets.filter((ticket) => activeArea === "outdoor" ? ticket.zone === "Patio" : ticket.zone !== "Patio");
   const manualReadyStatuses = Object.entries(statusOverrides).filter(([, status]) => status.state === "late" || status.state === "critical");
-  const areaManualReadyCount = manualReadyStatuses.filter(([objectKey]) => {
+  const manualStatusArea = (objectKey: string): Area | undefined => {
     const [objectType, objectId] = objectKey.split(":");
-    if (objectType === "chair") return activeArea === "indoor";
-    const table = floorTables.find((candidate) => String(candidate.id) === objectId);
-    return table?.area === activeArea;
+    if (objectType === "chair") return "indoor";
+    return floorTables.find((candidate) => String(candidate.id) === objectId)?.area;
+  };
+  const areaManualReadyCount = manualReadyStatuses.filter(([objectKey]) => {
+    return manualStatusArea(objectKey) === activeArea;
   }).length;
+  const outdoorReadyCount = readyTickets.filter((ticket) => ticket.zone === "Patio").length
+    + manualReadyStatuses.filter(([objectKey]) => manualStatusArea(objectKey) === "outdoor").length;
   const totalReadyCount = readyTickets.length + manualReadyStatuses.length;
   const areaWaitingCount = areaReadyTickets.length + areaManualReadyCount;
   const selectedTable = floorTables.find((table) => table.id === selectedId);
@@ -466,7 +470,10 @@ export default function Home() {
             <div className="heading-actions">
             <div className="view-tabs" role="tablist" aria-label="Floor area">
               <button role="tab" aria-selected={activeArea === "indoor"} className={activeArea === "indoor" ? "active" : ""} onClick={() => switchArea("indoor")}>Indoor <span>{floorTables.filter((table) => table.area === "indoor").length + barChairs.length}</span></button>
-              <button role="tab" aria-selected={activeArea === "outdoor"} className={activeArea === "outdoor" ? "active" : ""} onClick={() => switchArea("outdoor")}>Outdoor <span>{floorTables.filter((table) => table.area === "outdoor").length}</span></button>
+              <div className="area-tab-wrap" role="presentation">
+                {activeArea === "indoor" && outdoorReadyCount > 0 && <small className="outdoor-ready-alert" role="status">Outdoor table ready to fly</small>}
+                <button role="tab" aria-selected={activeArea === "outdoor"} className={activeArea === "outdoor" ? "active" : activeArea === "indoor" && outdoorReadyCount > 0 ? "outdoor-ready" : ""} onClick={() => switchArea("outdoor")}>Outdoor <span>{floorTables.filter((table) => table.area === "outdoor").length}</span></button>
+              </div>
             </div>
             <div className="map-legend" aria-label="Table status legend">
               <span><i className="key greeting" /> Needs to be greeted</span>
