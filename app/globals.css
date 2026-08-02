@@ -13,10 +13,12 @@ h1,h2,h3,p { margin-top:0; }
 .brand-logo { width:54px; height:36px; padding:3px; object-fit:contain; background:#fff; border-radius:6px; }
 .shift-label { display:flex; align-items:center; gap:9px; color:#c9c8c0; font-size:.8rem; font-weight:800; }
 .live-dot { width:8px; height:8px; background:#66cf94; border-radius:50%; box-shadow:0 0 0 5px rgba(102,207,148,.12); }
+.shift-label.sync-live .live-dot { animation:live-pulse 2.4s ease-in-out infinite; }
 .shift-label.sync-syncing .live-dot,.shift-label.sync-connecting .live-dot { background:#72a8e5; box-shadow:0 0 0 5px rgba(114,168,229,.14); }
 .shift-label.sync-offline .live-dot { background:#dfa631; box-shadow:0 0 0 5px rgba(223,166,49,.14); animation:sync-pulse 1.2s ease-in-out infinite; }
 .sync-copy { color:#f1efe7; }
 @keyframes sync-pulse { 50% { opacity:.4; } }
+@keyframes live-pulse { 50% { box-shadow:0 0 0 7px rgba(102,207,148,.18); transform:scale(1.06); } }
 .top-stats { justify-self:end; display:flex; align-items:center; gap:22px; }
 .top-stats div { display:flex; align-items:baseline; gap:8px; }
 .top-stats span { color:#9f9e97; font-size:.65rem; font-weight:900; letter-spacing:.08em; text-transform:uppercase; }
@@ -99,3 +101,4 @@ h1 { margin-bottom:0; font-size:clamp(2rem,3vw,3.2rem); line-height:.95; letter-
 @media(max-width:520px){.top-stats div:first-child{display:none}.clock{font-size:.75rem}.brand{font-size:1rem}.workspace{padding-top:18px}.map-legend{gap:8px}.map-legend span{font-size:.61rem}}
 @media(min-width:761px) and (max-width:1180px){html,body,.app-shell{height:100dvh;overflow:hidden}.topbar{min-height:58px}.workspace{height:calc(100dvh - 58px);padding:12px 0 14px;gap:10px}.workspace-heading{min-height:48px;margin-bottom:9px}.workspace-heading h1{font-size:2rem}.floor-plan{height:calc(100dvh - 140px);min-height:0}.floor-column:has(.editor-bar) .floor-plan{height:calc(100dvh - 214px)}.service-rail{display:none}.floor-popover{max-height:calc(100% - 16px)}}
 @media(prefers-reduced-motion:no-preference){.floor-table,.queue-item,.primary-action{transition:160ms ease}.floor-table:hover{z-index:6;scale:1.04}}
+@media(prefers-reduced-motion:reduce){.live-dot{animation:none!important}}
