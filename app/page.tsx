@@ -68,7 +68,8 @@ function formatClock(date: Date) {
 }
 
 function formatShiftLabel(date: Date) {
-  return `${date.toLocaleDateString([], { weekday: "long" })} dinner`;
+  const service = date.getHours() >= 16 ? "dinner" : "lunch";
+  return `${date.toLocaleDateString([], { weekday: "long" })} ${service}`;
 }
 
 function tableState(ticket: Ticket | undefined, tick: number) {
@@ -461,7 +462,7 @@ export default function Home() {
       <section className="workspace">
         <div className="floor-column">
           <div className="workspace-heading">
-            <div><p className="eyebrow">Live service map</p><h1>{activeArea === "indoor" ? "Indoor floor" : "Outdoor patio"}</h1></div>
+            <div><p className="eyebrow">Live service map</p><h1>{activeArea === "indoor" ? "Indoor floor" : "Outdoor floor"}</h1></div>
             <div className="heading-actions">
             <div className="view-tabs" role="tablist" aria-label="Floor area">
               <button role="tab" aria-selected={activeArea === "indoor"} className={activeArea === "indoor" ? "active" : ""} onClick={() => switchArea("indoor")}>Indoor <span>{floorTables.filter((table) => table.area === "indoor").length + barChairs.length}</span></button>
