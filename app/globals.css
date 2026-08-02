@@ -102,3 +102,21 @@ h1 { margin-bottom:0; font-size:clamp(2rem,3vw,3.2rem); line-height:.95; letter-
 @media(min-width:761px) and (max-width:1180px){html,body,.app-shell{height:100dvh;overflow:hidden}.topbar{min-height:58px}.workspace{height:calc(100dvh - 58px);padding:12px 0 14px;gap:10px}.workspace-heading{min-height:48px;margin-bottom:9px}.workspace-heading h1{font-size:2rem}.floor-plan{height:calc(100dvh - 140px);min-height:0}.floor-column:has(.editor-bar) .floor-plan{height:calc(100dvh - 214px)}.service-rail{display:none}.floor-popover{max-height:calc(100% - 16px)}}
 @media(prefers-reduced-motion:no-preference){.floor-table,.queue-item,.primary-action{transition:160ms ease}.floor-table:hover{z-index:6;scale:1.04}}
 @media(prefers-reduced-motion:reduce){.live-dot{animation:none!important}}
+@media(orientation:portrait) and (max-width:900px){
+  html,body,.app-shell{height:auto;min-height:100%;overflow:auto}
+  .topbar{min-height:92px;padding:9px 18px;grid-template-columns:1fr auto auto;grid-template-rows:auto auto;gap:5px 14px}
+  .brand{grid-column:1;grid-row:1}.top-stats{grid-column:2;grid-row:1}.clock{grid-column:3;grid-row:1}
+  .shift-label{grid-column:1/-1;grid-row:2;display:flex;justify-self:center}
+  .workspace{width:94vw;height:auto;padding:16px 0 22px;gap:10px}
+  .workspace-heading{min-height:0;align-items:flex-start;flex-direction:column}.heading-actions{width:100%;align-items:flex-end;justify-content:space-between}
+  .floor-scroll{overflow:hidden}
+  .floor-plan{--floor-object-scale:.78;width:100%;height:auto!important;min-width:0;min-height:0!important;aspect-ratio:5/4}
+  .bar-chair{scale:.82}
+  .floor-popover{width:min(380px,calc(100% - 20px));max-height:calc(100% - 20px);left:50%!important;top:50%!important}
+  .service-rail{display:grid}
+}
+@media(orientation:portrait) and (max-width:520px){
+  .topbar{padding-inline:12px;gap:5px 9px}.brand span{display:none}.brand-logo{width:46px;height:32px}.top-stats{gap:10px}.top-stats span{display:none}.clock{font-size:.78rem}
+  .workspace{width:96vw}.workspace-heading h1{font-size:2rem}.heading-actions{align-items:flex-start;flex-wrap:wrap}.map-legend{gap:7px}.map-legend span{font-size:.56rem}
+  .floor-plan{--floor-object-scale:.56;aspect-ratio:4/5}.bar-chair{scale:.66}.photo-desk{width:32%}.pass-fixture,.patio-service{width:38%}
+}
