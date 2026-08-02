@@ -574,7 +574,7 @@ export default function Home() {
                     style={{
                       left: `${table.x}%`,
                       top: `${table.y}%`,
-                      transform: `translate(-50%, -50%) rotate(${table.rotation ?? 0}deg)`,
+                      transform: `translate(-50%, -50%) rotate(${table.rotation ?? 0}deg) scale(var(--floor-object-scale, 1))`,
                       "--table-counter-rotation": `${-(table.rotation ?? 0)}deg`,
                     } as React.CSSProperties & Record<"--table-counter-rotation", string>}
                     onClick={(event) => {
