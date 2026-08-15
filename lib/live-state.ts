@@ -7,6 +7,13 @@ export type StatusOverride = {
   startedAt: number;
 };
 
+export type DailyServiceMetrics = {
+  dayKey: string;
+  customersServed: number;
+  completedServices: number;
+  totalWaitSeconds: number;
+};
+
 export type FloorTable = {
   id: number;
   label: string;
@@ -29,6 +36,7 @@ export type SharedFloorState = {
   floorTables: FloorTable[];
   barChairs: BarChair[];
   statusOverrides: Record<string, StatusOverride>;
+  dailyService: DailyServiceMetrics;
   version: number;
   updatedAt: number;
 };
@@ -39,6 +47,7 @@ export type StateOperation =
   | { type: "upsertChair"; chair: BarChair }
   | { type: "deleteChair"; chairId: number }
   | { type: "setStatus"; objectKey: string; status: StatusOverride }
+  | { type: "completeService"; objectKey: string; dayKey: string; customers: number }
   | { type: "replaceLayout"; floorTables: FloorTable[]; barChairs: BarChair[] }
   | { type: "clearAll" }
   | { type: "bootstrap"; state: Pick<SharedFloorState, "floorTables" | "barChairs" | "statusOverrides"> };
@@ -74,6 +83,7 @@ export const emptySharedState: SharedFloorState = {
   floorTables: savedFloorTables,
   barChairs: savedBarChairs,
   statusOverrides: {},
+  dailyService: { dayKey: "", customersServed: 0, completedServices: 0, totalWaitSeconds: 0 },
   version: 0,
   updatedAt: 0,
 };
@@ -83,6 +93,7 @@ export function applyStateOperation(state: SharedFloorState, operation: StateOpe
     floorTables: state.floorTables.map((table) => ({ ...table })),
     barChairs: state.barChairs.map((chair) => ({ ...chair })),
     statusOverrides: { ...state.statusOverrides },
+    dailyService: { ...state.dailyService },
     version: state.version + 1,
     updatedAt: Date.now(),
   };
@@ -111,6 +122,19 @@ export function applyStateOperation(state: SharedFloorState, operation: StateOpe
     case "setStatus":
       next.statusOverrides[operation.objectKey] = operation.status;
       break;
+    case "completeService": {
+      const previousStatus = state.statusOverrides[operation.objectKey];
+      if (next.dailyService.dayKey !== operation.dayKey) {
+        next.dailyService = { dayKey: operation.dayKey, customersServed: 0, completedServices: 0, totalWaitSeconds: 0 };
+      }
+      if (previousStatus && previousStatus.state !== "clear") {
+        next.dailyService.customersServed += Math.max(1, Math.round(operation.customers));
+        next.dailyService.completedServices += 1;
+        next.dailyService.totalWaitSeconds += Math.max(0, Math.floor((next.updatedAt - previousStatus.startedAt) / 1000));
+      }
+      next.statusOverrides[operation.objectKey] = { state: "clear", startedAt: next.updatedAt };
+      break;
+    }
     case "replaceLayout":
       next.floorTables = operation.floorTables;
       next.barChairs = operation.barChairs;
