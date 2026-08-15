@@ -382,6 +382,11 @@ export default function Home() {
     setSelectedChairId(null);
   }
 
+  function resetDailyService() {
+    if (!window.confirm("Reset customers served and average wait to zero for today?")) return;
+    commitOperation({ type: "resetDailyService", dayKey: serviceDayKey(new Date()) });
+  }
+
   function switchArea(area: Area) {
     setActiveArea(area);
     setSelectedChairId(null);
@@ -521,6 +526,7 @@ export default function Home() {
             <button className="delete-table-button" onClick={removeSelectedTable} disabled={!selectedTable}>Delete selected</button>
             <button className="add-chair-button" onClick={addBarChair} disabled={activeArea !== "indoor"}>+ Add chair</button>
             <button className="delete-chair-button" onClick={removeSelectedChair} disabled={selectedChairId === null}>Delete chair</button>
+            <button className="reset-daily" onClick={resetDailyService}>Reset daily totals</button>
             <button className="reset-layout" onClick={resetLayout}>Clear layout</button>
           </div>}
 
