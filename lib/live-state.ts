@@ -55,16 +55,26 @@ export type StateOperation =
 
 export const savedFloorTables: FloorTable[] = [
   { id: 1, label: "1", x: 77.5, y: 72.5, shape: "round", seats: 2, area: "indoor", rotation: 90 },
-  { id: 2, label: "2", x: 77.5, y: 60, shape: "round", seats: 2, area: "indoor", rotation: 90 },
+  { id: 2, label: "2", x: 77.5, y: 55, shape: "round", seats: 2, area: "indoor", rotation: 90 },
   { id: 3, label: "3", x: 55, y: 72.5, shape: "round", seats: 2, area: "indoor", rotation: 90 },
-  { id: 4, label: "4", x: 55, y: 60, shape: "round", seats: 2, area: "indoor", rotation: 90 },
-  { id: 5, label: "5", x: 55, y: 47.5, shape: "round", seats: 2, area: "indoor", rotation: 90 },
+  { id: 4, label: "4", x: 55, y: 55, shape: "round", seats: 2, area: "indoor", rotation: 90 },
+  { id: 5, label: "5", x: 55, y: 35, shape: "round", seats: 2, area: "indoor", rotation: 90 },
   { id: 6, label: "6", x: 32.5, y: 72.5, shape: "round", seats: 2, area: "indoor", rotation: 90 },
-  { id: 7, label: "7", x: 32.5, y: 60, shape: "round", seats: 2, area: "indoor", rotation: 90 },
-  { id: 8, label: "8", x: 32.5, y: 47.5, shape: "round", seats: 2, area: "indoor", rotation: 90 },
+  { id: 7, label: "7", x: 32.5, y: 55, shape: "round", seats: 2, area: "indoor", rotation: 90 },
+  { id: 8, label: "8", x: 32.5, y: 35, shape: "round", seats: 2, area: "indoor", rotation: 90 },
   { id: 9, label: "9", x: 12.5, y: 72.5, shape: "round", seats: 2, area: "indoor", rotation: 90 },
-  { id: 10, label: "10", x: 12.5, y: 60, shape: "round", seats: 2, area: "indoor", rotation: 90 },
-  { id: 11, label: "11", x: 12.5, y: 47.5, shape: "booth", seats: 6, area: "indoor", rotation: 90 },
+  { id: 10, label: "10", x: 12.5, y: 55, shape: "round", seats: 2, area: "indoor", rotation: 90 },
+  { id: 11, label: "11", x: 12.5, y: 35, shape: "booth", seats: 6, area: "indoor", rotation: 90 },
+  { id: 12, label: "12", x: 17.5, y: 70, shape: "round", seats: 2, area: "outdoor", rotation: 0 },
+  { id: 13, label: "13", x: 10, y: 55, shape: "round", seats: 2, area: "outdoor", rotation: 0 },
+  { id: 14, label: "14", x: 25, y: 55, shape: "round", seats: 2, area: "outdoor", rotation: 0 },
+  { id: 15, label: "15", x: 17.5, y: 40, shape: "round", seats: 2, area: "outdoor", rotation: 0 },
+  { id: 16, label: "16", x: 47.5, y: 70, shape: "round", seats: 2, area: "outdoor", rotation: 0 },
+  { id: 17, label: "17", x: 47.5, y: 40, shape: "round", seats: 2, area: "outdoor", rotation: 0 },
+  { id: 18, label: "18", x: 77.5, y: 70, shape: "round", seats: 2, area: "outdoor", rotation: 0 },
+  { id: 19, label: "19", x: 85, y: 55, shape: "round", seats: 2, area: "outdoor", rotation: 0 },
+  { id: 20, label: "20", x: 70, y: 55, shape: "round", seats: 2, area: "outdoor", rotation: 0 },
+  { id: 21, label: "21", x: 77.5, y: 40, shape: "round", seats: 2, area: "outdoor", rotation: 0 },
 ];
 
 export const savedBarChairs: BarChair[] = [
