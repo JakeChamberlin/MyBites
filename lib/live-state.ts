@@ -48,6 +48,7 @@ export type StateOperation =
   | { type: "deleteChair"; chairId: number }
   | { type: "setStatus"; objectKey: string; status: StatusOverride }
   | { type: "completeService"; objectKey: string; dayKey: string; customers: number }
+  | { type: "resetDailyService"; dayKey: string }
   | { type: "replaceLayout"; floorTables: FloorTable[]; barChairs: BarChair[] }
   | { type: "clearAll" }
   | { type: "bootstrap"; state: Pick<SharedFloorState, "floorTables" | "barChairs" | "statusOverrides"> };
@@ -135,6 +136,9 @@ export function applyStateOperation(state: SharedFloorState, operation: StateOpe
       next.statusOverrides[operation.objectKey] = { state: "clear", startedAt: next.updatedAt };
       break;
     }
+    case "resetDailyService":
+      next.dailyService = { dayKey: operation.dayKey, customersServed: 0, completedServices: 0, totalWaitSeconds: 0 };
+      break;
     case "replaceLayout":
       next.floorTables = operation.floorTables;
       next.barChairs = operation.barChairs;
