@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   type Area,
   type BarChair,
+  type DailyServiceMetrics,
   type FloorTable,
   type ServiceState,
   type Shape,
@@ -72,6 +73,12 @@ function formatShiftLabel(date: Date) {
   return `${date.toLocaleDateString([], { weekday: "long" })} ${service}`;
 }
 
+function serviceDayKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+const emptyDailyService: DailyServiceMetrics = { dayKey: "", customersServed: 0, completedServices: 0, totalWaitSeconds: 0 };
+
 function tableState(ticket: Ticket | undefined, tick: number) {
   if (!ticket) return "clear";
   if (ticket.status === "plating") return "plating";
@@ -137,6 +144,7 @@ export default function Home() {
   const [floorTables, setFloorTables] = useState(defaultFloorTables);
   const [barChairs, setBarChairs] = useState(defaultBarChairs);
   const [statusOverrides, setStatusOverrides] = useState<Record<string, StatusOverride>>({});
+  const [dailyService, setDailyService] = useState<DailyServiceMetrics>(emptyDailyService);
   const [selectedChairId, setSelectedChairId] = useState<number | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [syncStatus, setSyncStatus] = useState<"connecting" | "live" | "syncing" | "offline">("connecting");
@@ -164,6 +172,7 @@ export default function Home() {
     setFloorTables(migratedTables);
     setBarChairs(migratedChairs);
     setStatusOverrides(migratedStatuses);
+    setDailyService(sharedState.dailyService);
   }
 
   useEffect(() => {
@@ -275,6 +284,9 @@ export default function Home() {
     : selectedTicket?.elapsedSeconds ?? 0;
   const manualReadyWaits = manualReadyStatuses.map(([, status]) => Math.max(0, Math.floor(((clock?.getTime() ?? status.startedAt) - status.startedAt) / 1000)));
   const longestWait = Math.max(readyTickets[0]?.elapsedSeconds ?? 0, ...manualReadyWaits, 0);
+  const currentDayKey = clock ? serviceDayKey(clock) : dailyService.dayKey;
+  const todayService = dailyService.dayKey === currentDayKey ? dailyService : emptyDailyService;
+  const averageWait = todayService.completedServices > 0 ? Math.round(todayService.totalWaitSeconds / todayService.completedServices) : 0;
 
   function markServed(ticket: Ticket) {
     setTickets((current) => current.filter((item) => item.id !== ticket.id));
@@ -392,7 +404,12 @@ export default function Home() {
 
   function setSelectedStatus(state: ServiceState) {
     if (!selectedObjectKey) return;
-    const status = { state, startedAt: currentTimestamp() };
+    if (state === "clear" && selectedState !== "clear") {
+      const customers = selectedChair ? 1 : selectedTable?.seats ?? 1;
+      commitOperation({ type: "completeService", objectKey: selectedObjectKey, dayKey: serviceDayKey(new Date()), customers });
+      return;
+    }
+    const status = { state, startedAt: selectedOverride && selectedOverride.state !== "clear" ? selectedOverride.startedAt : currentTimestamp() };
     statusOverridesRef.current = { ...statusOverridesRef.current, [selectedObjectKey]: status };
     setStatusOverrides(statusOverridesRef.current);
     commitOperation({ type: "setStatus", objectKey: selectedObjectKey, status });
@@ -466,7 +483,7 @@ export default function Home() {
       <section className="workspace">
         <div className="floor-column">
           <div className="workspace-heading">
-            <div><p className="eyebrow">Live service map</p><h1>{activeArea === "indoor" ? "Indoor floor" : "Outdoor floor"}</h1></div>
+            <div className="floor-title"><p className="eyebrow">Live service map</p><div className="floor-title-row"><h1>{activeArea === "indoor" ? "Indoor floor" : "Outdoor floor"}</h1><div className="daily-summary" aria-label="Today's service totals"><span><small>Customers served</small><strong>{todayService.customersServed}</strong></span><span><small>Average wait</small><strong>{formatTimer(averageWait)}</strong></span></div></div></div>
             <div className="heading-actions">
             <div className="view-tabs" role="tablist" aria-label="Floor area">
               <button role="tab" aria-selected={activeArea === "indoor"} className={activeArea === "indoor" ? "active" : ""} onClick={() => switchArea("indoor")}>Indoor <span>{floorTables.filter((table) => table.area === "indoor").length + barChairs.length}</span></button>
