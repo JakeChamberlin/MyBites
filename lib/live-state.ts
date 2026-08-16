@@ -1,5 +1,6 @@
 export type Shape = "round" | "square" | "booth";
 export type Area = "indoor" | "outdoor";
+export type FloorObjectType = "bush" | "firepit" | "door";
 export type ServiceState = "fresh" | "watch" | "late" | "critical" | "plating" | "clear";
 
 export type StatusOverride = {
@@ -33,9 +34,19 @@ export type BarChair = {
   y: number;
 };
 
+export type FloorObject = {
+  id: number;
+  type: FloorObjectType;
+  x: number;
+  y: number;
+  area: Area;
+  rotation?: number;
+};
+
 export type SharedFloorState = {
   floorTables: FloorTable[];
   barChairs: BarChair[];
+  floorObjects: FloorObject[];
   statusOverrides: Record<string, StatusOverride>;
   dailyService: DailyServiceMetrics;
   version: number;
@@ -47,6 +58,8 @@ export type StateOperation =
   | { type: "deleteTable"; tableId: number }
   | { type: "upsertChair"; chair: BarChair }
   | { type: "deleteChair"; chairId: number }
+  | { type: "upsertObject"; object: FloorObject }
+  | { type: "deleteObject"; objectId: number }
   | { type: "setStatus"; objectKey: string; status: StatusOverride }
   | { type: "completeService"; objectKey: string; dayKey: string; customers: number }
   | { type: "resetDailyService"; dayKey: string }
@@ -55,27 +68,27 @@ export type StateOperation =
   | { type: "bootstrap"; state: Pick<SharedFloorState, "floorTables" | "barChairs" | "statusOverrides"> };
 
 export const savedFloorTables: FloorTable[] = [
-  { id: 1, label: "1", x: 77.5, y: 72.5, shape: "round", seats: 2, area: "indoor", rotation: 90 },
-  { id: 2, label: "2", x: 77.5, y: 55, shape: "round", seats: 2, area: "indoor", rotation: 90 },
-  { id: 3, label: "3", x: 55, y: 72.5, shape: "round", seats: 2, area: "indoor", rotation: 90 },
-  { id: 4, label: "4", x: 55, y: 55, shape: "round", seats: 2, area: "indoor", rotation: 90 },
-  { id: 5, label: "5", x: 55, y: 35, shape: "round", seats: 2, area: "indoor", rotation: 90 },
-  { id: 6, label: "6", x: 32.5, y: 72.5, shape: "round", seats: 2, area: "indoor", rotation: 90 },
-  { id: 7, label: "7", x: 32.5, y: 55, shape: "round", seats: 2, area: "indoor", rotation: 90 },
-  { id: 8, label: "8", x: 32.5, y: 35, shape: "round", seats: 2, area: "indoor", rotation: 90 },
-  { id: 9, label: "9", x: 12.5, y: 72.5, shape: "round", seats: 2, area: "indoor", rotation: 90 },
-  { id: 10, label: "10", x: 12.5, y: 55, shape: "round", seats: 2, area: "indoor", rotation: 90 },
-  { id: 11, label: "11", x: 12.5, y: 35, shape: "booth", seats: 6, area: "indoor", rotation: 90 },
-  { id: 12, label: "12", x: 17.5, y: 70, shape: "round", seats: 2, area: "outdoor", rotation: 0 },
-  { id: 13, label: "13", x: 10, y: 55, shape: "round", seats: 2, area: "outdoor", rotation: 0 },
-  { id: 14, label: "14", x: 25, y: 55, shape: "round", seats: 2, area: "outdoor", rotation: 0 },
-  { id: 15, label: "15", x: 17.5, y: 40, shape: "round", seats: 2, area: "outdoor", rotation: 0 },
-  { id: 16, label: "16", x: 47.5, y: 70, shape: "round", seats: 2, area: "outdoor", rotation: 0 },
-  { id: 17, label: "17", x: 47.5, y: 40, shape: "round", seats: 2, area: "outdoor", rotation: 0 },
-  { id: 18, label: "18", x: 77.5, y: 70, shape: "round", seats: 2, area: "outdoor", rotation: 0 },
-  { id: 19, label: "19", x: 85, y: 55, shape: "round", seats: 2, area: "outdoor", rotation: 0 },
-  { id: 20, label: "20", x: 70, y: 55, shape: "round", seats: 2, area: "outdoor", rotation: 0 },
-  { id: 21, label: "21", x: 77.5, y: 40, shape: "round", seats: 2, area: "outdoor", rotation: 0 },
+  { id: 1, label: "101", x: 77.5, y: 72.5, shape: "square", seats: 2, area: "indoor", rotation: 180 },
+  { id: 2, label: "201", x: 77.5, y: 55, shape: "square", seats: 2, area: "indoor", rotation: 180 },
+  { id: 3, label: "102", x: 55, y: 72.5, shape: "square", seats: 2, area: "indoor", rotation: 180 },
+  { id: 4, label: "202", x: 55, y: 55, shape: "square", seats: 2, area: "indoor", rotation: 180 },
+  { id: 5, label: "301", x: 55, y: 35, shape: "square", seats: 2, area: "indoor", rotation: 180 },
+  { id: 6, label: "103", x: 32.5, y: 72.5, shape: "square", seats: 2, area: "indoor", rotation: 180 },
+  { id: 7, label: "203", x: 32.5, y: 55, shape: "square", seats: 2, area: "indoor", rotation: 180 },
+  { id: 8, label: "302", x: 32.5, y: 35, shape: "square", seats: 2, area: "indoor", rotation: 180 },
+  { id: 9, label: "104", x: 12.5, y: 72.5, shape: "square", seats: 2, area: "indoor", rotation: 90 },
+  { id: 10, label: "204", x: 12.5, y: 55, shape: "square", seats: 2, area: "indoor", rotation: 90 },
+  { id: 11, label: "303", x: 12.5, y: 35, shape: "booth", seats: 4, area: "indoor", rotation: 90 },
+  { id: 12, label: "12", x: 12.5, y: 67.5, shape: "square", seats: 2, area: "outdoor", rotation: 90 },
+  { id: 13, label: "13", x: 7.5, y: 57.5, shape: "square", seats: 2, area: "outdoor", rotation: 90 },
+  { id: 14, label: "14", x: 17.5, y: 57.5, shape: "square", seats: 2, area: "outdoor", rotation: 270 },
+  { id: 15, label: "15", x: 12.5, y: 47.5, shape: "square", seats: 2, area: "outdoor", rotation: 90 },
+  { id: 16, label: "16", x: 45, y: 57.5, shape: "square", seats: 2, area: "outdoor", rotation: 90 },
+  { id: 17, label: "17", x: 35, y: 45, shape: "square", seats: 2, area: "outdoor", rotation: 90 },
+  { id: 18, label: "18", x: 47.5, y: 75, shape: "square", seats: 2, area: "outdoor", rotation: 90 },
+  { id: 19, label: "19", x: 75, y: 37.5, shape: "square", seats: 2, area: "outdoor", rotation: 90 },
+  { id: 20, label: "20", x: 67.5, y: 67.5, shape: "square", seats: 2, area: "outdoor", rotation: 90 },
+  { id: 21, label: "21", x: 87.5, y: 50, shape: "square", seats: 2, area: "outdoor", rotation: 90 },
 ];
 
 export const savedBarChairs: BarChair[] = [
@@ -91,9 +104,35 @@ export const savedBarChairs: BarChair[] = [
   { id: 10, label: "B10", x: 17.5, y: 82.5 },
 ];
 
+export const savedFloorObjects: FloorObject[] = [
+  { id: 1, type: "bush", x: 5, y: 90, area: "outdoor", rotation: 0 },
+  { id: 2, type: "bush", x: 12.5, y: 90, area: "outdoor", rotation: 0 },
+  { id: 3, type: "bush", x: 20, y: 90, area: "outdoor", rotation: 0 },
+  { id: 4, type: "bush", x: 27.5, y: 90, area: "outdoor", rotation: 0 },
+  { id: 5, type: "bush", x: 35, y: 90, area: "outdoor", rotation: 0 },
+  { id: 6, type: "firepit", x: 30, y: 57.5, area: "outdoor", rotation: 0 },
+  { id: 7, type: "firepit", x: 72.5, y: 50, area: "outdoor", rotation: 0 },
+  { id: 8, type: "bush", x: 42.5, y: 90, area: "outdoor", rotation: 0 },
+  { id: 9, type: "bush", x: 50, y: 90, area: "outdoor", rotation: 0 },
+  { id: 10, type: "bush", x: 57.5, y: 90, area: "outdoor", rotation: 0 },
+  { id: 11, type: "bush", x: 65, y: 90, area: "outdoor", rotation: 0 },
+  { id: 12, type: "bush", x: 72.5, y: 90, area: "outdoor", rotation: 0 },
+  { id: 13, type: "bush", x: 80, y: 90, area: "outdoor", rotation: 0 },
+  { id: 14, type: "bush", x: 87.5, y: 90, area: "outdoor", rotation: 0 },
+  { id: 15, type: "bush", x: 95, y: 90, area: "outdoor", rotation: 0 },
+  { id: 16, type: "bush", x: 95, y: 80, area: "outdoor", rotation: 0 },
+  { id: 17, type: "bush", x: 95, y: 70, area: "outdoor", rotation: 0 },
+  { id: 18, type: "bush", x: 95, y: 60, area: "outdoor", rotation: 0 },
+  { id: 19, type: "bush", x: 95, y: 50, area: "outdoor", rotation: 0 },
+  { id: 20, type: "bush", x: 95, y: 40, area: "outdoor", rotation: 0 },
+  { id: 21, type: "bush", x: 95, y: 30, area: "outdoor", rotation: 0 },
+  { id: 22, type: "bush", x: 95, y: 20, area: "outdoor", rotation: 0 },
+];
+
 export const emptySharedState: SharedFloorState = {
   floorTables: savedFloorTables,
   barChairs: savedBarChairs,
+  floorObjects: savedFloorObjects,
   statusOverrides: {},
   dailyService: { dayKey: "", customersServed: 0, completedServices: 0, totalWaitSeconds: 0 },
   version: 0,
@@ -104,6 +143,7 @@ export function applyStateOperation(state: SharedFloorState, operation: StateOpe
   const next: SharedFloorState = {
     floorTables: state.floorTables.map((table) => ({ ...table })),
     barChairs: state.barChairs.map((chair) => ({ ...chair })),
+    floorObjects: state.floorObjects.map((object) => ({ ...object })),
     statusOverrides: { ...state.statusOverrides },
     dailyService: { ...state.dailyService },
     version: state.version + 1,
@@ -131,6 +171,15 @@ export function applyStateOperation(state: SharedFloorState, operation: StateOpe
       next.barChairs = next.barChairs.filter((chair) => chair.id !== operation.chairId);
       delete next.statusOverrides[`chair:${operation.chairId}`];
       break;
+    case "upsertObject": {
+      const index = next.floorObjects.findIndex((object) => object.id === operation.object.id);
+      if (index === -1) next.floorObjects.push(operation.object);
+      else next.floorObjects[index] = operation.object;
+      break;
+    }
+    case "deleteObject":
+      next.floorObjects = next.floorObjects.filter((object) => object.id !== operation.objectId);
+      break;
     case "setStatus":
       next.statusOverrides[operation.objectKey] = operation.status;
       break;
@@ -157,6 +206,7 @@ export function applyStateOperation(state: SharedFloorState, operation: StateOpe
     case "clearAll":
       next.floorTables = [];
       next.barChairs = [];
+      next.floorObjects = [];
       next.statusOverrides = {};
       break;
     case "bootstrap":
