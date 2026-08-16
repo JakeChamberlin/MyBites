@@ -5,6 +5,7 @@ export type ServiceState = "fresh" | "watch" | "late" | "critical" | "plating" |
 export type StatusOverride = {
   state: ServiceState;
   startedAt: number;
+  serviceStartedAt?: number;
 };
 
 export type DailyServiceMetrics = {
@@ -141,7 +142,7 @@ export function applyStateOperation(state: SharedFloorState, operation: StateOpe
       if (previousStatus && previousStatus.state !== "clear") {
         next.dailyService.customersServed += Math.max(1, Math.round(operation.customers));
         next.dailyService.completedServices += 1;
-        next.dailyService.totalWaitSeconds += Math.max(0, Math.floor((next.updatedAt - previousStatus.startedAt) / 1000));
+        next.dailyService.totalWaitSeconds += Math.max(0, Math.floor((next.updatedAt - (previousStatus.serviceStartedAt ?? previousStatus.startedAt)) / 1000));
       }
       next.statusOverrides[operation.objectKey] = { state: "clear", startedAt: next.updatedAt };
       break;
