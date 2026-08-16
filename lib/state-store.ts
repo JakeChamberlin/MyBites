@@ -22,6 +22,7 @@ function parseState(data: unknown, version: unknown, updatedAt: unknown): Shared
   return {
     floorTables: Array.isArray(source.floorTables) ? source.floorTables : [],
     barChairs: Array.isArray(source.barChairs) ? source.barChairs : [],
+    floorObjects: Array.isArray(source.floorObjects) ? source.floorObjects : [],
     statusOverrides: source.statusOverrides && typeof source.statusOverrides === "object" ? source.statusOverrides : {},
     dailyService: source.dailyService && typeof source.dailyService === "object"
       ? { dayKey: source.dailyService.dayKey ?? "", customersServed: source.dailyService.customersServed ?? 0, completedServices: source.dailyService.completedServices ?? 0, totalWaitSeconds: source.dailyService.totalWaitSeconds ?? 0 }
