@@ -5,6 +5,8 @@ import {
   type Area,
   type BarChair,
   type DailyServiceMetrics,
+  type FloorObject,
+  type FloorObjectType,
   type FloorTable,
   type ServiceState,
   type Shape,
@@ -143,16 +145,22 @@ export default function Home() {
   const [lastServed, setLastServed] = useState<Ticket | null>(null);
   const [floorTables, setFloorTables] = useState(defaultFloorTables);
   const [barChairs, setBarChairs] = useState(defaultBarChairs);
+  const [floorObjects, setFloorObjects] = useState<FloorObject[]>([]);
   const [statusOverrides, setStatusOverrides] = useState<Record<string, StatusOverride>>({});
   const [dailyService, setDailyService] = useState<DailyServiceMetrics>(emptyDailyService);
   const [selectedChairId, setSelectedChairId] = useState<number | null>(null);
+  const [selectedFloorObjectId, setSelectedFloorObjectId] = useState<number | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [syncStatus, setSyncStatus] = useState<"connecting" | "live" | "syncing" | "offline">("connecting");
   const [addShape, setAddShape] = useState<Shape>("round");
+  const [addObjectType, setAddObjectType] = useState<FloorObjectType>("bush");
   const [activeArea, setActiveArea] = useState<Area>("indoor");
+  const [flippedViews, setFlippedViews] = useState<Record<Area, boolean>>({ indoor: false, outdoor: false });
+  const [rotationAnimating, setRotationAnimating] = useState(false);
   const [snapGuides, setSnapGuides] = useState<{ x: number | null; y: number | null }>({ x: null, y: null });
   const floorTablesRef = useRef(floorTables);
   const barChairsRef = useRef(barChairs);
+  const floorObjectsRef = useRef(floorObjects);
   const statusOverridesRef = useRef(statusOverrides);
   const pendingMutationsRef = useRef(0);
   const draggingRef = useRef(false);
@@ -165,18 +173,26 @@ export default function Home() {
       return { ...table, area: outdoorPosition ? "outdoor" as const : "indoor" as const, ...(outdoorPosition ?? {}) };
     });
     const migratedChairs = sharedState.barChairs.map((chair, index) => ({ ...chair, label: chair.label ?? `B${index + 1}` }));
+    const migratedObjects = sharedState.floorObjects ?? [];
     const migratedStatuses = Object.fromEntries(Object.entries(sharedState.statusOverrides).map(([key, value]) => [key, value.state === "watch" ? { ...value, state: "late" as const } : value]));
     floorTablesRef.current = migratedTables;
     barChairsRef.current = migratedChairs;
+    floorObjectsRef.current = migratedObjects;
     statusOverridesRef.current = migratedStatuses;
     setFloorTables(migratedTables);
     setBarChairs(migratedChairs);
+    setFloorObjects(migratedObjects);
     setStatusOverrides(migratedStatuses);
     setDailyService(sharedState.dailyService);
   }
 
   useEffect(() => {
     setClock(new Date());
+    const previousViewSetting = window.localStorage.getItem("mybites-view-flipped") === "true";
+    setFlippedViews({
+      indoor: window.localStorage.getItem("mybites-view-flipped-indoor") === "true" || (window.localStorage.getItem("mybites-view-flipped-indoor") === null && previousViewSetting),
+      outdoor: window.localStorage.getItem("mybites-view-flipped-outdoor") === "true" || (window.localStorage.getItem("mybites-view-flipped-outdoor") === null && previousViewSetting),
+    });
     const interval = window.setInterval(() => {
       setTick((value) => value + 1);
       setClock(new Date());
@@ -220,6 +236,18 @@ export default function Home() {
           });
           if (migrationResponse.ok) sharedState = await migrationResponse.json() as SharedFloorState;
         }
+        if (initial && sharedState.floorTables.some((table) => table.shape === "booth" && table.seats !== 4)) {
+          const boothMigrationResponse = await fetch("/api/state", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: "replaceLayout",
+              floorTables: sharedState.floorTables.map((table) => table.shape === "booth" ? { ...table, seats: 4 } : table),
+              barChairs: sharedState.barChairs,
+            } satisfies StateOperation),
+          });
+          if (boothMigrationResponse.ok) sharedState = await boothMigrationResponse.json() as SharedFloorState;
+        }
         if (!active) return;
         applyRemoteState(sharedState);
         setSyncStatus("live");
@@ -257,6 +285,7 @@ export default function Home() {
   const visibleTickets = useMemo(() => tickets.map((ticket) => ({ ...ticket, elapsedSeconds: ticket.elapsedSeconds + tick })), [tickets, tick]);
   const readyTickets = visibleTickets.filter((ticket) => ticket.status === "ready").sort((a, b) => b.elapsedSeconds - a.elapsedSeconds);
   const visibleFloorTables = floorTables.filter((table) => table.area === activeArea);
+  const visibleFloorObjects = floorObjects.filter((object) => object.area === activeArea);
   const areaReadyTickets = readyTickets.filter((ticket) => activeArea === "outdoor" ? ticket.zone === "Patio" : ticket.zone !== "Patio");
   const manualReadyStatuses = Object.entries(statusOverrides).filter(([, status]) => status.state === "late" || status.state === "critical");
   const manualStatusArea = (objectKey: string): Area | undefined => {
@@ -273,6 +302,12 @@ export default function Home() {
   const areaWaitingCount = areaReadyTickets.length + areaManualReadyCount;
   const selectedTable = floorTables.find((table) => table.id === selectedId);
   const selectedChair = barChairs.find((chair) => chair.id === selectedChairId);
+  const selectedFloorObject = floorObjects.find((object) => object.id === selectedFloorObjectId);
+  const viewFlipped = flippedViews[activeArea];
+  const selectedFloorX = selectedTable?.x ?? selectedChair?.x ?? 50;
+  const selectedFloorY = selectedTable?.y ?? selectedChair?.y ?? 50;
+  const selectedViewX = viewFlipped ? 100 - selectedFloorX : selectedFloorX;
+  const selectedViewY = viewFlipped ? 100 - selectedFloorY : selectedFloorY;
   const selectedTicket = selectedChair
     ? visibleTickets.find((ticket) => ticket.zone === "Bar" && ticket.table === selectedChair.label)
     : visibleTickets.find((ticket) => ticket.id === selectedId);
@@ -307,12 +342,13 @@ export default function Home() {
   function addTable() {
     const nextId = createObjectId();
     const nextLabel = `${Math.max(...floorTablesRef.current.map((table) => Number.parseInt(table.label, 10) || 0), 0) + 1}`;
-    const table: FloorTable = { id: nextId, label: nextLabel, x: 50, y: 50, shape: addShape, seats: addShape === "round" ? 2 : addShape === "booth" ? 6 : 4, area: activeArea, rotation: activeArea === "indoor" ? 90 : 0 };
+    const table: FloorTable = { id: nextId, label: nextLabel, x: 50, y: 50, shape: addShape, seats: addShape === "round" ? 2 : 4, area: activeArea, rotation: activeArea === "indoor" ? 90 : 0 };
     floorTablesRef.current = [...floorTablesRef.current, table];
     setFloorTables(floorTablesRef.current);
     commitOperation({ type: "upsertTable", table });
     setSelectedId(nextId);
     setSelectedChairId(null);
+    setSelectedFloorObjectId(null);
   }
 
   function addBarChair() {
@@ -324,6 +360,33 @@ export default function Home() {
     commitOperation({ type: "upsertChair", chair });
     setSelectedChairId(nextId);
     setSelectedId(0);
+    setSelectedFloorObjectId(null);
+  }
+
+  function addFloorObject() {
+    const object: FloorObject = { id: createObjectId(), type: addObjectType, x: 50, y: 50, area: activeArea, rotation: 0 };
+    floorObjectsRef.current = [...floorObjectsRef.current, object];
+    setFloorObjects(floorObjectsRef.current);
+    commitOperation({ type: "upsertObject", object });
+    setSelectedFloorObjectId(object.id);
+    setSelectedId(0);
+    setSelectedChairId(null);
+  }
+
+  function removeSelectedFloorObject() {
+    if (selectedFloorObjectId === null) return;
+    floorObjectsRef.current = floorObjectsRef.current.filter((object) => object.id !== selectedFloorObjectId);
+    setFloorObjects(floorObjectsRef.current);
+    commitOperation({ type: "deleteObject", objectId: selectedFloorObjectId });
+    setSelectedFloorObjectId(null);
+  }
+
+  function rotateSelectedFloorObject() {
+    if (!selectedFloorObject) return;
+    const object = { ...selectedFloorObject, rotation: ((selectedFloorObject.rotation ?? 0) + 90) % 360 };
+    floorObjectsRef.current = floorObjectsRef.current.map((item) => item.id === object.id ? object : item);
+    setFloorObjects(floorObjectsRef.current);
+    commitOperation({ type: "upsertObject", object });
   }
 
   function removeSelectedChair() {
@@ -345,6 +408,18 @@ export default function Home() {
     floorTablesRef.current = floorTablesRef.current.map((item) => item.id === selectedId ? updatedTable : item);
     setFloorTables(floorTablesRef.current);
     commitOperation({ type: "upsertTable", table: updatedTable });
+  }
+
+  function renameSelectedTable() {
+    if (!selectedTable) return;
+    const label = window.prompt("Enter a new table name", selectedTable.label)?.trim();
+    if (!label || label === selectedTable.label) return;
+    updateSelectedTable({ label: label.slice(0, 4) });
+  }
+
+  function rotateSelectedTable() {
+    if (!selectedTable) return;
+    updateSelectedTable({ rotation: ((selectedTable.rotation ?? 0) + 90) % 360 });
   }
 
   function updateSelectedChair(changes: Partial<BarChair>) {
@@ -370,16 +445,19 @@ export default function Home() {
   }
 
   function resetLayout() {
-    if (!window.confirm("Clear all tables and bar chairs from the floor layout?")) return;
+    if (!window.confirm("Clear all tables, chairs, and objects from the floor layout?")) return;
     floorTablesRef.current = defaultFloorTables;
     barChairsRef.current = defaultBarChairs;
+    floorObjectsRef.current = [];
     statusOverridesRef.current = {};
     setFloorTables(floorTablesRef.current);
     setBarChairs(barChairsRef.current);
+    setFloorObjects(floorObjectsRef.current);
     setStatusOverrides(statusOverridesRef.current);
     commitOperation({ type: "clearAll" });
     setSelectedId(0);
     setSelectedChairId(null);
+    setSelectedFloorObjectId(null);
   }
 
   function resetDailyService() {
@@ -387,10 +465,21 @@ export default function Home() {
     commitOperation({ type: "resetDailyService", dayKey: serviceDayKey(new Date()) });
   }
 
+  function toggleViewRotation() {
+    setRotationAnimating(true);
+    setFlippedViews((current) => {
+      const next = { ...current, [activeArea]: !current[activeArea] };
+      window.localStorage.setItem(`mybites-view-flipped-${activeArea}`, String(next[activeArea]));
+      return next;
+    });
+  }
+
   function switchArea(area: Area) {
+    setRotationAnimating(false);
     setActiveArea(area);
     setSelectedChairId(null);
     setSelectedId(0);
+    setSelectedFloorObjectId(null);
   }
 
   function selectTicket(ticket: Ticket) {
@@ -400,11 +489,13 @@ export default function Home() {
         setActiveArea("indoor");
         setSelectedChairId(chair.id);
         setSelectedId(0);
+        setSelectedFloorObjectId(null);
         return;
       }
     }
     setSelectedChairId(null);
     setSelectedId(ticket.id);
+    setSelectedFloorObjectId(null);
   }
 
   function setSelectedStatus(state: ServiceState) {
@@ -431,11 +522,14 @@ export default function Home() {
     event.currentTarget.dataset.dragged = "true";
     const floor = event.currentTarget.parentElement?.getBoundingClientRect();
     if (!floor) return;
-    const rawX = ((event.clientX - floor.left) / floor.width) * 100;
-    const rawY = ((event.clientY - floor.top) / floor.height) * 100;
+    const pointerX = ((event.clientX - floor.left) / floor.width) * 100;
+    const pointerY = ((event.clientY - floor.top) / floor.height) * 100;
+    const rawX = viewFlipped ? 100 - pointerX : pointerX;
+    const rawY = viewFlipped ? 100 - pointerY : pointerY;
     const alignmentObjects = [
       ...floorTables.filter((table) => table.id !== tableId && table.area === activeArea),
       ...(activeArea === "indoor" ? barChairs : []),
+      ...visibleFloorObjects,
     ];
     const snappedX = snapToObjects(rawX, alignmentObjects.map((object) => object.x));
     const snappedY = snapToObjects(rawY, alignmentObjects.map((object) => object.y));
@@ -451,11 +545,14 @@ export default function Home() {
     event.currentTarget.dataset.dragged = "true";
     const floor = event.currentTarget.parentElement?.getBoundingClientRect();
     if (!floor) return;
-    const rawX = ((event.clientX - floor.left) / floor.width) * 100;
-    const rawY = ((event.clientY - floor.top) / floor.height) * 100;
+    const pointerX = ((event.clientX - floor.left) / floor.width) * 100;
+    const pointerY = ((event.clientY - floor.top) / floor.height) * 100;
+    const rawX = viewFlipped ? 100 - pointerX : pointerX;
+    const rawY = viewFlipped ? 100 - pointerY : pointerY;
     const alignmentObjects = [
       ...floorTables.filter((table) => table.area === "indoor"),
       ...barChairs.filter((chair) => chair.id !== chairId),
+      ...floorObjects.filter((object) => object.area === "indoor"),
     ];
     const snappedX = snapToObjects(rawX, alignmentObjects.map((object) => object.x));
     const snappedY = snapToObjects(rawY, alignmentObjects.map((object) => object.y));
@@ -466,7 +563,30 @@ export default function Home() {
     setBarChairs(barChairsRef.current);
   }
 
-  function finishMoving(type?: "table" | "chair", id?: number) {
+  function moveFloorObject(event: React.PointerEvent<HTMLButtonElement>, objectId: number) {
+    if (!editMode || !event.currentTarget.hasPointerCapture(event.pointerId)) return;
+    event.currentTarget.dataset.dragged = "true";
+    const floor = event.currentTarget.parentElement?.getBoundingClientRect();
+    if (!floor) return;
+    const pointerX = ((event.clientX - floor.left) / floor.width) * 100;
+    const pointerY = ((event.clientY - floor.top) / floor.height) * 100;
+    const rawX = viewFlipped ? 100 - pointerX : pointerX;
+    const rawY = viewFlipped ? 100 - pointerY : pointerY;
+    const alignmentObjects = [
+      ...floorTables.filter((table) => table.area === activeArea),
+      ...(activeArea === "indoor" ? barChairs : []),
+      ...floorObjects.filter((object) => object.id !== objectId && object.area === activeArea),
+    ];
+    const snappedX = snapToObjects(rawX, alignmentObjects.map((object) => object.x));
+    const snappedY = snapToObjects(rawY, alignmentObjects.map((object) => object.y));
+    const x = clamp(snappedX.value, 2.5, 97.5);
+    const y = clamp(snappedY.value, 2.5, 97.5);
+    setSnapGuides({ x: snappedX.guide, y: snappedY.guide });
+    floorObjectsRef.current = floorObjectsRef.current.map((object) => object.id === objectId ? { ...object, x, y } : object);
+    setFloorObjects(floorObjectsRef.current);
+  }
+
+  function finishMoving(type?: "table" | "chair" | "object", id?: number) {
     draggingRef.current = false;
     setSnapGuides({ x: null, y: null });
     if (type === "table") {
@@ -476,6 +596,10 @@ export default function Home() {
     if (type === "chair") {
       const chair = barChairsRef.current.find((item) => item.id === id);
       if (chair) commitOperation({ type: "upsertChair", chair });
+    }
+    if (type === "object") {
+      const object = floorObjectsRef.current.find((item) => item.id === id);
+      if (object) commitOperation({ type: "upsertObject", object });
     }
   }
 
@@ -524,14 +648,21 @@ export default function Home() {
           </div>
 
           {editMode && <div className="editor-bar" role="toolbar" aria-label="Floor layout editor">
-            <div className="editor-intro"><strong>Layout editor</strong><span>Drag tables and chairs · Smart alignment on</span></div>
+            <div className="editor-intro"><strong>Layout editor</strong><span>Drag tables, chairs, and objects · Smart alignment on</span></div>
             <div className="shape-picker">
               {(["round", "square", "booth"] as Shape[]).map((shape) => <button key={shape} className={addShape === shape ? "active" : ""} onClick={() => setAddShape(shape)}><i className={`shape-icon ${shape}`} />{shape}</button>)}
             </div>
             <button className="add-table" onClick={addTable}>+ Add table</button>
+            <button className="rename-table-button" onClick={renameSelectedTable} disabled={!selectedTable}>Rename table</button>
             <button className="delete-table-button" onClick={removeSelectedTable} disabled={!selectedTable}>Delete selected</button>
             <button className="add-chair-button" onClick={addBarChair} disabled={activeArea !== "indoor"}>+ Add chair</button>
             <button className="delete-chair-button" onClick={removeSelectedChair} disabled={selectedChairId === null}>Delete chair</button>
+            <div className="object-picker" aria-label="Object type">
+              {(["bush", "firepit", "door"] as FloorObjectType[]).map((type) => <button key={type} className={addObjectType === type ? "active" : ""} onClick={() => setAddObjectType(type)}>{type === "firepit" ? "Fire pit" : type}</button>)}
+            </div>
+            <button className="add-object-button" onClick={addFloorObject}>+ Add object</button>
+            <button className="rotate-object-button" onClick={rotateSelectedFloorObject} disabled={!selectedFloorObject}>Rotate object</button>
+            <button className="delete-object-button" onClick={removeSelectedFloorObject} disabled={!selectedFloorObject}>Delete object</button>
             <button className="reset-daily" onClick={resetDailyService}>Reset daily totals</button>
             <button className="reset-layout" onClick={resetLayout}>Clear layout</button>
           </div>}
@@ -542,23 +673,60 @@ export default function Home() {
               aria-label={`${activeArea} restaurant floor plan`}
               data-editing={editMode ? "true" : "false"}
               onClick={(event) => {
-                if ((event.target as HTMLElement).closest(".floor-table,.bar-chair")) return;
+                if ((event.target as HTMLElement).closest(".floor-table,.bar-chair,.floor-object")) return;
                 setSelectedId(0);
                 setSelectedChairId(null);
+                setSelectedFloorObjectId(null);
               }}
             >
+              <div className={`floor-canvas${viewFlipped ? " flipped" : ""}${rotationAnimating ? " animate-rotation" : ""}`} onTransitionEnd={() => setRotationAnimating(false)}>
               {activeArea === "indoor" ? <>
                 <div className="bar-fixture"><span>BAR</span></div>
                 <div className="pass-fixture"><span>Indoor</span><strong>{areaWaitingCount}</strong><small>waiting</small></div>
                 <div className="photo-desk"><span>PHOTO DESK</span></div>
               </> : <>
                 <div className="patio-service"><span>Patio</span><strong>{areaWaitingCount}</strong><small>waiting</small></div>
-                <div className="patio-rail" />
-                <div className="plant plant-one">✦</div><div className="plant plant-two">✦</div><div className="plant plant-three">✦</div>
               </>}
 
               {editMode && snapGuides.x !== null && <div className="snap-guide vertical" style={{ left: `${snapGuides.x}%` }} />}
               {editMode && snapGuides.y !== null && <div className="snap-guide horizontal" style={{ top: `${snapGuides.y}%` }} />}
+
+              {visibleFloorObjects.map((object) => <button
+                key={object.id}
+                className={`floor-object ${object.type}${selectedFloorObjectId === object.id ? " selected" : ""}`}
+                style={{ left: `${object.x}%`, top: `${object.y}%`, transform: `translate(-50%, -50%) rotate(${object.rotation ?? 0}deg) scale(var(--floor-object-scale, 1))` }}
+                onClick={(event) => {
+                  if (!editMode) return;
+                  if (event.currentTarget.dataset.dragged === "true") {
+                    event.currentTarget.dataset.dragged = "false";
+                    return;
+                  }
+                  setSelectedFloorObjectId(object.id);
+                  setSelectedId(0);
+                  setSelectedChairId(null);
+                }}
+                onPointerDown={(event) => {
+                  if (!editMode) return;
+                  event.preventDefault();
+                  draggingRef.current = true;
+                  event.currentTarget.dataset.dragged = "false";
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                }}
+                onPointerMove={(event) => moveFloorObject(event, object.id)}
+                onPointerUp={(event) => {
+                  if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+                  finishMoving("object", object.id);
+                }}
+                onPointerCancel={() => finishMoving()}
+                aria-label={`${object.type === "firepit" ? "Fire pit" : object.type} floor object${editMode ? ", drag to move" : ""}`}
+                aria-pressed={selectedFloorObjectId === object.id}
+                tabIndex={editMode ? 0 : -1}
+                data-editing={editMode ? "true" : "false"}
+              >
+                {object.type === "bush" && <><span /><span /><span /></>}
+                {object.type === "firepit" && Array.from({ length: 8 }, (_, index) => <span key={index} />)}
+                {object.type === "door" && <span />}
+              </button>)}
 
               {activeArea === "indoor" && barChairs.map((chair) => {
                 const ticket = visibleTickets.find((item) => item.zone === "Bar" && item.table === chair.label);
@@ -578,6 +746,7 @@ export default function Home() {
                     }
                     setSelectedChairId(chair.id);
                     setSelectedId(0);
+                    setSelectedFloorObjectId(null);
                   }}
                   onPointerDown={(event) => {
                     if (!editMode) return;
@@ -623,6 +792,7 @@ export default function Home() {
                       }
                       setSelectedId(table.id);
                       setSelectedChairId(null);
+                      setSelectedFloorObjectId(null);
                     }}
                     onPointerDown={(event) => {
                       if (!editMode) return;
@@ -642,7 +812,7 @@ export default function Home() {
                     data-editing={editMode ? "true" : "false"}
                   >
                     <span className="chair chair-a" /><span className="chair chair-b" />
-                    {table.seats >= 4 && <><span className="chair chair-c" /><span className="chair chair-d" /></>}
+                    {(table.shape === "booth" || table.seats >= 4) && <><span className="chair chair-c" /><span className="chair chair-d" /></>}
                     <span className="table-copy">
                       <span className="table-number">{table.label}</span>
                       <span className="table-time">{override ? state === "late" ? `FLY ${formatTimer(elapsed)}` : shortStatusLabel(state) : ticket ? ticket.status === "plating" ? "SERVING" : formatTimer(ticket.elapsedSeconds) : "CLEAR"}</span>
@@ -650,14 +820,23 @@ export default function Home() {
                   </button>
                 );
               })}
+              </div>
+
+              <button
+                className="rotate-view-button"
+                onClick={(event) => { event.stopPropagation(); toggleViewRotation(); }}
+                aria-label={viewFlipped ? "Rotate floor view upright" : "Rotate floor view upside down"}
+                aria-pressed={viewFlipped}
+                title={viewFlipped ? "Rotate view upright" : "Rotate view 180 degrees"}
+              >↻</button>
 
               {selectedObjectKey && (selectedTable || selectedChair) && <section
-                className={`selected-panel selection-dialog floor-popover ${((selectedTable?.x ?? selectedChair?.x ?? 50) > 58) ? "opens-left" : "opens-right"}`}
+                className={`selected-panel selection-dialog floor-popover ${(selectedViewX > 58) ? "opens-left" : "opens-right"}`}
                 role="dialog"
                 aria-label={`Table ${selectedTable?.label ?? selectedChair?.label} details`}
                 style={{
-                  left: `clamp(200px, calc(${selectedTable?.x ?? selectedChair?.x ?? 50}% + ${((selectedTable?.x ?? selectedChair?.x ?? 50) > 58) ? -220 : 220}px), calc(100% - 200px))`,
-                  top: `clamp(185px, ${selectedTable?.y ?? selectedChair?.y ?? 50}%, calc(100% - 185px))`,
+                  left: `clamp(200px, calc(${selectedViewX}% + ${(selectedViewX > 58) ? -220 : 220}px), calc(100% - 200px))`,
+                  top: `clamp(185px, ${selectedViewY}%, calc(100% - 185px))`,
                 }}
                 onClick={(event) => event.stopPropagation()}
               >
@@ -666,15 +845,16 @@ export default function Home() {
                   <div><p>Selected table</p><h2>{selectedTable?.label ?? selectedChair?.label ?? "—"}</h2></div>
                   <span className={`status-chip ${selectedState}`}>{statusLabel(selectedState)}{selectedState !== "clear" && ` · ${formatTimer(selectedElapsed)}`}</span>
                 </div>
-                <div className="status-picker" aria-label="Set table status">
+                {!editMode && <div className="status-picker" aria-label="Set table status">
                   <strong>Set status</strong>
                   <div>{statusOptions.map((option) => <button key={option.state} className={`status-option ${option.state}${selectedState === option.state ? " active" : ""}`} onClick={() => setSelectedStatus(option.state)} aria-pressed={selectedState === option.state}><i />{option.label}</button>)}</div>
-                </div>
+                </div>}
                 {editMode && selectedTable && <div className="table-editor">
                   <label>Table name<input value={selectedTable.label} maxLength={4} onChange={(event) => updateSelectedTable({ label: event.target.value })} /></label>
-                  <label>Seats<select value={selectedTable.seats} onChange={(event) => updateSelectedTable({ seats: Number(event.target.value) })}><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="6">6</option><option value="8">8</option></select></label>
-                  <label>Shape<select value={selectedTable.shape} onChange={(event) => updateSelectedTable({ shape: event.target.value as Shape })}><option value="round">Round</option><option value="square">Square</option><option value="booth">Booth</option></select></label>
+                  <label>Seats<select value={selectedTable.seats} disabled={selectedTable.shape === "booth"} onChange={(event) => updateSelectedTable({ seats: Number(event.target.value) })}><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="6">6</option><option value="8">8</option></select></label>
+                  <label>Shape<select value={selectedTable.shape} onChange={(event) => { const shape = event.target.value as Shape; updateSelectedTable({ shape, ...(shape === "booth" ? { seats: 4 } : {}) }); }}><option value="round">Round</option><option value="square">Square</option><option value="booth">Booth</option></select></label>
                   <label>Area<select value={selectedTable.area} onChange={(event) => { const area = event.target.value as Area; updateSelectedTable({ area }); setActiveArea(area); }}><option value="indoor">Indoor</option><option value="outdoor">Outdoor</option></select></label>
+                  <button className="rotate-table-inline" onClick={rotateSelectedTable}>↻ Rotate table 90°</button>
                   <button className="remove-table" onClick={removeSelectedTable}>Remove table</button>
                   <p>Changes save automatically for everyone.</p>
                 </div>}
@@ -693,19 +873,6 @@ export default function Home() {
           </div>
         </div>
 
-        {activeArea === "outdoor" && <aside className="service-rail">
-          <section className="runner-queue">
-            <div className="rail-heading"><div><p className="eyebrow">{activeArea} runner queue</p><h2>Ready now</h2></div><span>{areaReadyTickets.length}</span></div>
-            <div className="queue-list">
-              {areaReadyTickets.map((ticket, index) => <button key={ticket.id} className={`queue-item ${(selectedTicket?.id === ticket.id) ? "active" : ""}`} onClick={() => selectTicket(ticket)}>
-                <span className="queue-rank">{index + 1}</span>
-                <span className="queue-table"><small>Table</small><strong>{ticket.table}</strong></span>
-                <span className="queue-status">{ticket.status === "plating" ? "Serving" : "Service needed"}<small>{ticket.guests} guests · {ticket.zone}</small></span>
-                <strong className={`queue-time ${urgency(ticket.elapsedSeconds)}`}>{formatTimer(ticket.elapsedSeconds)}</strong>
-              </button>)}
-            </div>
-          </section>
-        </aside>}
       </section>
 
       {lastServed && <div className="toast" role="status"><span>Table {lastServed.table} served</span><button onClick={undoServed}>Undo</button><button className="toast-close" onClick={() => setLastServed(null)}>×</button></div>}
