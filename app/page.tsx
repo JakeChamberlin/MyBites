@@ -409,12 +409,18 @@ export default function Home() {
 
   function setSelectedStatus(state: ServiceState) {
     if (!selectedObjectKey) return;
+    if (state === selectedState) return;
     if (state === "clear" && selectedState !== "clear") {
       const customers = selectedChair ? 1 : selectedTable?.seats ?? 1;
       commitOperation({ type: "completeService", objectKey: selectedObjectKey, dayKey: serviceDayKey(new Date()), customers });
       return;
     }
-    const status = { state, startedAt: selectedOverride && selectedOverride.state !== "clear" ? selectedOverride.startedAt : currentTimestamp() };
+    const now = currentTimestamp();
+    const status = {
+      state,
+      startedAt: now,
+      serviceStartedAt: selectedOverride && selectedOverride.state !== "clear" ? selectedOverride.serviceStartedAt ?? selectedOverride.startedAt : now,
+    };
     statusOverridesRef.current = { ...statusOverridesRef.current, [selectedObjectKey]: status };
     setStatusOverrides(statusOverridesRef.current);
     commitOperation({ type: "setStatus", objectKey: selectedObjectKey, status });
@@ -589,13 +595,16 @@ export default function Home() {
                   aria-label={`Bar seat ${chair.label}, ${ticket ? state : "clear"}${editMode ? ", drag to move" : ""}`}
                   aria-pressed={selectedChairId === chair.id}
                   data-editing={editMode ? "true" : "false"}
-                ><span>{chair.label}</span>{state !== "clear" && <small>{state === "plating" ? "S" : Math.floor(elapsed / 60)}</small>}</button>;
+                ><span>{chair.label}</span>{state !== "clear" && <small>{state === "plating" ? "S" : state === "late" ? formatTimer(elapsed) : Math.floor(elapsed / 60)}</small>}</button>;
               })}
 
               {visibleFloorTables.map((table) => {
                 const ticket = visibleTickets.find((item) => item.id === table.id);
                 const override = statusOverrides[`table:${table.id}`];
                 const state = override?.state ?? tableState(ticket, 0);
+                const elapsed = override
+                  ? Math.max(0, Math.floor(((clock?.getTime() ?? override.startedAt) - override.startedAt) / 1000))
+                  : ticket?.elapsedSeconds ?? 0;
                 const selected = selectedId === table.id;
                 return (
                   <button
@@ -636,7 +645,7 @@ export default function Home() {
                     {table.seats >= 4 && <><span className="chair chair-c" /><span className="chair chair-d" /></>}
                     <span className="table-copy">
                       <span className="table-number">{table.label}</span>
-                      <span className="table-time">{override ? shortStatusLabel(state) : ticket ? ticket.status === "plating" ? "SERVING" : formatTimer(ticket.elapsedSeconds) : "CLEAR"}</span>
+                      <span className="table-time">{override ? state === "late" ? `FLY ${formatTimer(elapsed)}` : shortStatusLabel(state) : ticket ? ticket.status === "plating" ? "SERVING" : formatTimer(ticket.elapsedSeconds) : "CLEAR"}</span>
                     </span>
                   </button>
                 );
