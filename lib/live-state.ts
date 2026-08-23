@@ -23,6 +23,16 @@ export type DailyServiceMetrics = {
   postFlightSamples: number;
 };
 
+export type YearlyServiceMetrics = {
+  yearKey: string;
+  greetingServingSeconds: number;
+  greetingServingSamples: number;
+  readyToFlySeconds: number;
+  readyToFlySamples: number;
+  postFlightSeconds: number;
+  postFlightSamples: number;
+};
+
 export type FloorTable = {
   id: number;
   label: string;
@@ -56,6 +66,7 @@ export type SharedFloorState = {
   floorObjects: FloorObject[];
   statusOverrides: Record<string, StatusOverride>;
   dailyService: DailyServiceMetrics;
+  yearlyService: YearlyServiceMetrics;
   version: number;
   updatedAt: number;
 };
@@ -151,6 +162,18 @@ function createDailyServiceMetrics(dayKey = ""): DailyServiceMetrics {
   };
 }
 
+function createYearlyServiceMetrics(yearKey = ""): YearlyServiceMetrics {
+  return {
+    yearKey,
+    greetingServingSeconds: 0,
+    greetingServingSamples: 0,
+    readyToFlySeconds: 0,
+    readyToFlySamples: 0,
+    postFlightSeconds: 0,
+    postFlightSamples: 0,
+  };
+}
+
 function waitCategory(state: ServiceState) {
   if (state === "late" || state === "critical") return "ready";
   if (state === "fresh" || state === "watch" || state === "plating") return "service";
@@ -158,7 +181,7 @@ function waitCategory(state: ServiceState) {
   return null;
 }
 
-function recordCategoryWait(metrics: DailyServiceMetrics, status: StatusOverride, endedAt: number) {
+function recordCategoryWait(metrics: DailyServiceMetrics | YearlyServiceMetrics, status: StatusOverride, endedAt: number) {
   const seconds = Math.max(0, Math.floor((endedAt - (status.categoryStartedAt ?? status.startedAt)) / 1000));
   const category = waitCategory(status.state);
   if (category === "ready") {
@@ -181,6 +204,7 @@ export const emptySharedState: SharedFloorState = {
   floorObjects: savedFloorObjects,
   statusOverrides: {},
   dailyService: createDailyServiceMetrics(),
+  yearlyService: createYearlyServiceMetrics(),
   version: 0,
   updatedAt: 0,
 };
@@ -192,6 +216,7 @@ export function applyStateOperation(state: SharedFloorState, operation: StateOpe
     floorObjects: state.floorObjects.map((object) => ({ ...object })),
     statusOverrides: { ...state.statusOverrides },
     dailyService: { ...state.dailyService },
+    yearlyService: { ...state.yearlyService },
     version: state.version + 1,
     updatedAt: Date.now(),
   };
@@ -228,10 +253,15 @@ export function applyStateOperation(state: SharedFloorState, operation: StateOpe
       break;
     case "setStatus": {
       if (next.dailyService.dayKey !== operation.dayKey) next.dailyService = createDailyServiceMetrics(operation.dayKey);
+      const yearKey = operation.dayKey.slice(0, 4);
+      if (next.yearlyService.yearKey !== yearKey) next.yearlyService = createYearlyServiceMetrics(yearKey);
       const previousStatus = state.statusOverrides[operation.objectKey];
       const previousCategory = previousStatus ? waitCategory(previousStatus.state) : null;
       const nextCategory = waitCategory(operation.status.state);
-      if (previousStatus && previousCategory && previousCategory !== nextCategory) recordCategoryWait(next.dailyService, previousStatus, next.updatedAt);
+      if (previousStatus && previousCategory && previousCategory !== nextCategory) {
+        recordCategoryWait(next.dailyService, previousStatus, next.updatedAt);
+        recordCategoryWait(next.yearlyService, previousStatus, next.updatedAt);
+      }
       next.statusOverrides[operation.objectKey] = {
         ...operation.status,
         categoryStartedAt: previousStatus && previousCategory === nextCategory
@@ -245,8 +275,11 @@ export function applyStateOperation(state: SharedFloorState, operation: StateOpe
       if (next.dailyService.dayKey !== operation.dayKey) {
         next.dailyService = createDailyServiceMetrics(operation.dayKey);
       }
+      const yearKey = operation.dayKey.slice(0, 4);
+      if (next.yearlyService.yearKey !== yearKey) next.yearlyService = createYearlyServiceMetrics(yearKey);
       if (previousStatus && previousStatus.state !== "clear") {
         recordCategoryWait(next.dailyService, previousStatus, next.updatedAt);
+        recordCategoryWait(next.yearlyService, previousStatus, next.updatedAt);
         next.dailyService.customersServed += Math.max(1, Math.round(operation.customers));
         next.dailyService.completedServices += 1;
         next.dailyService.totalWaitSeconds += Math.max(0, Math.floor((next.updatedAt - (previousStatus.serviceStartedAt ?? previousStatus.startedAt)) / 1000));
