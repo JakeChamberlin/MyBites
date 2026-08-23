@@ -1,7 +1,7 @@
 export type Shape = "round" | "square" | "booth";
 export type Area = "indoor" | "outdoor";
 export type FloorObjectType = "bush" | "firepit" | "door";
-export type ServiceState = "fresh" | "watch" | "late" | "critical" | "plating" | "clear";
+export type ServiceState = "fresh" | "watch" | "late" | "critical" | "plating" | "postflight" | "clear";
 
 export type StatusOverride = {
   state: ServiceState;
