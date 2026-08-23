@@ -44,6 +44,7 @@ const statusOptions: Array<{ state: ServiceState; label: string; shortLabel: str
   { state: "late", label: "Ready to fly", shortLabel: "FLY" },
   { state: "critical", label: "Overdue", shortLabel: "OVERDUE" },
   { state: "plating", label: "Serving", shortLabel: "SERVING" },
+  { state: "postflight", label: "Post Flight", shortLabel: "POST" },
   { state: "clear", label: "Clear", shortLabel: "CLEAR" },
 ];
 
@@ -642,6 +643,7 @@ export default function Home() {
               <span><i className="key critical" /> Overdue</span>
               <span><i className="key late" /> Ready to fly</span>
               <span><i className="key plating" /> Serving</span>
+              <span><i className="key postflight" /> Post Flight</span>
               <span><i className="key clear" /> Clear</span>
             </div>
             <button
@@ -774,7 +776,7 @@ export default function Home() {
                   aria-label={`Bar seat ${chair.label}, ${ticket ? state : "clear"}${editMode ? ", drag to move" : ""}`}
                   aria-pressed={selectedChairId === chair.id}
                   data-editing={editMode ? "true" : "false"}
-                ><span>{chair.label}</span>{state !== "clear" && <small>{state === "plating" ? "S" : state === "late" ? formatTimer(elapsed) : Math.floor(elapsed / 60)}</small>}</button>;
+                ><span>{chair.label}</span>{state !== "clear" && <small>{state === "plating" ? "S" : state === "postflight" ? "PF" : state === "late" ? formatTimer(elapsed) : Math.floor(elapsed / 60)}</small>}</button>;
               })}
 
               {visibleFloorTables.map((table) => {
