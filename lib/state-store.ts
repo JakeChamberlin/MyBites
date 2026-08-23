@@ -25,8 +25,17 @@ function parseState(data: unknown, version: unknown, updatedAt: unknown): Shared
     floorObjects: Array.isArray(source.floorObjects) ? source.floorObjects : [],
     statusOverrides: source.statusOverrides && typeof source.statusOverrides === "object" ? source.statusOverrides : {},
     dailyService: source.dailyService && typeof source.dailyService === "object"
-      ? { dayKey: source.dailyService.dayKey ?? "", customersServed: source.dailyService.customersServed ?? 0, completedServices: source.dailyService.completedServices ?? 0, totalWaitSeconds: source.dailyService.totalWaitSeconds ?? 0 }
-      : { dayKey: "", customersServed: 0, completedServices: 0, totalWaitSeconds: 0 },
+      ? {
+        dayKey: source.dailyService.dayKey ?? "",
+        customersServed: source.dailyService.customersServed ?? 0,
+        completedServices: source.dailyService.completedServices ?? 0,
+        totalWaitSeconds: source.dailyService.totalWaitSeconds ?? 0,
+        greetingServingSeconds: source.dailyService.greetingServingSeconds ?? 0,
+        greetingServingSamples: source.dailyService.greetingServingSamples ?? 0,
+        readyToFlySeconds: source.dailyService.readyToFlySeconds ?? 0,
+        readyToFlySamples: source.dailyService.readyToFlySamples ?? 0,
+      }
+      : { dayKey: "", customersServed: 0, completedServices: 0, totalWaitSeconds: 0, greetingServingSeconds: 0, greetingServingSamples: 0, readyToFlySeconds: 0, readyToFlySamples: 0 },
     version: Number(version ?? source.version ?? 0),
     updatedAt: Number(updatedAt ?? source.updatedAt ?? 0),
   };
