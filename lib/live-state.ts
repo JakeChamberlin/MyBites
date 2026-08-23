@@ -7,6 +7,7 @@ export type StatusOverride = {
   state: ServiceState;
   startedAt: number;
   serviceStartedAt?: number;
+  categoryStartedAt?: number;
 };
 
 export type DailyServiceMetrics = {
@@ -14,6 +15,10 @@ export type DailyServiceMetrics = {
   customersServed: number;
   completedServices: number;
   totalWaitSeconds: number;
+  greetingServingSeconds: number;
+  greetingServingSamples: number;
+  readyToFlySeconds: number;
+  readyToFlySamples: number;
 };
 
 export type FloorTable = {
@@ -60,7 +65,7 @@ export type StateOperation =
   | { type: "deleteChair"; chairId: number }
   | { type: "upsertObject"; object: FloorObject }
   | { type: "deleteObject"; objectId: number }
-  | { type: "setStatus"; objectKey: string; status: StatusOverride }
+  | { type: "setStatus"; objectKey: string; dayKey: string; status: StatusOverride }
   | { type: "completeService"; objectKey: string; dayKey: string; customers: number }
   | { type: "resetDailyService"; dayKey: string }
   | { type: "replaceLayout"; floorTables: FloorTable[]; barChairs: BarChair[] }
@@ -129,12 +134,44 @@ export const savedFloorObjects: FloorObject[] = [
   { id: 22, type: "bush", x: 95, y: 20, area: "outdoor", rotation: 0 },
 ];
 
+function createDailyServiceMetrics(dayKey = ""): DailyServiceMetrics {
+  return {
+    dayKey,
+    customersServed: 0,
+    completedServices: 0,
+    totalWaitSeconds: 0,
+    greetingServingSeconds: 0,
+    greetingServingSamples: 0,
+    readyToFlySeconds: 0,
+    readyToFlySamples: 0,
+  };
+}
+
+function waitCategory(state: ServiceState) {
+  if (state === "late" || state === "critical") return "ready";
+  if (state === "fresh" || state === "watch" || state === "plating") return "service";
+  return null;
+}
+
+function recordCategoryWait(metrics: DailyServiceMetrics, status: StatusOverride, endedAt: number) {
+  const seconds = Math.max(0, Math.floor((endedAt - (status.categoryStartedAt ?? status.startedAt)) / 1000));
+  const category = waitCategory(status.state);
+  if (category === "ready") {
+    metrics.readyToFlySeconds += seconds;
+    metrics.readyToFlySamples += 1;
+  }
+  if (category === "service") {
+    metrics.greetingServingSeconds += seconds;
+    metrics.greetingServingSamples += 1;
+  }
+}
+
 export const emptySharedState: SharedFloorState = {
   floorTables: savedFloorTables,
   barChairs: savedBarChairs,
   floorObjects: savedFloorObjects,
   statusOverrides: {},
-  dailyService: { dayKey: "", customersServed: 0, completedServices: 0, totalWaitSeconds: 0 },
+  dailyService: createDailyServiceMetrics(),
   version: 0,
   updatedAt: 0,
 };
@@ -180,24 +217,36 @@ export function applyStateOperation(state: SharedFloorState, operation: StateOpe
     case "deleteObject":
       next.floorObjects = next.floorObjects.filter((object) => object.id !== operation.objectId);
       break;
-    case "setStatus":
-      next.statusOverrides[operation.objectKey] = operation.status;
+    case "setStatus": {
+      if (next.dailyService.dayKey !== operation.dayKey) next.dailyService = createDailyServiceMetrics(operation.dayKey);
+      const previousStatus = state.statusOverrides[operation.objectKey];
+      const previousCategory = previousStatus ? waitCategory(previousStatus.state) : null;
+      const nextCategory = waitCategory(operation.status.state);
+      if (previousStatus && previousCategory && previousCategory !== nextCategory) recordCategoryWait(next.dailyService, previousStatus, next.updatedAt);
+      next.statusOverrides[operation.objectKey] = {
+        ...operation.status,
+        categoryStartedAt: previousStatus && previousCategory === nextCategory
+          ? previousStatus.categoryStartedAt ?? previousStatus.startedAt
+          : operation.status.categoryStartedAt ?? operation.status.startedAt,
+      };
       break;
+    }
     case "completeService": {
       const previousStatus = state.statusOverrides[operation.objectKey];
       if (next.dailyService.dayKey !== operation.dayKey) {
-        next.dailyService = { dayKey: operation.dayKey, customersServed: 0, completedServices: 0, totalWaitSeconds: 0 };
+        next.dailyService = createDailyServiceMetrics(operation.dayKey);
       }
       if (previousStatus && previousStatus.state !== "clear") {
+        recordCategoryWait(next.dailyService, previousStatus, next.updatedAt);
         next.dailyService.customersServed += Math.max(1, Math.round(operation.customers));
         next.dailyService.completedServices += 1;
         next.dailyService.totalWaitSeconds += Math.max(0, Math.floor((next.updatedAt - (previousStatus.serviceStartedAt ?? previousStatus.startedAt)) / 1000));
       }
-      next.statusOverrides[operation.objectKey] = { state: "clear", startedAt: next.updatedAt };
+      next.statusOverrides[operation.objectKey] = { state: "clear", startedAt: next.updatedAt, categoryStartedAt: next.updatedAt };
       break;
     }
     case "resetDailyService":
-      next.dailyService = { dayKey: operation.dayKey, customersServed: 0, completedServices: 0, totalWaitSeconds: 0 };
+      next.dailyService = createDailyServiceMetrics(operation.dayKey);
       break;
     case "replaceLayout":
       next.floorTables = operation.floorTables;
