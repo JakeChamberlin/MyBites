@@ -38,6 +38,17 @@ function parseState(data: unknown, version: unknown, updatedAt: unknown): Shared
         postFlightSamples: source.dailyService.postFlightSamples ?? 0,
       }
       : { dayKey: "", customersServed: 0, completedServices: 0, totalWaitSeconds: 0, greetingServingSeconds: 0, greetingServingSamples: 0, readyToFlySeconds: 0, readyToFlySamples: 0, postFlightSeconds: 0, postFlightSamples: 0 },
+    yearlyService: source.yearlyService && typeof source.yearlyService === "object"
+      ? {
+        yearKey: source.yearlyService.yearKey ?? "",
+        greetingServingSeconds: source.yearlyService.greetingServingSeconds ?? 0,
+        greetingServingSamples: source.yearlyService.greetingServingSamples ?? 0,
+        readyToFlySeconds: source.yearlyService.readyToFlySeconds ?? 0,
+        readyToFlySamples: source.yearlyService.readyToFlySamples ?? 0,
+        postFlightSeconds: source.yearlyService.postFlightSeconds ?? 0,
+        postFlightSamples: source.yearlyService.postFlightSamples ?? 0,
+      }
+      : { yearKey: "", greetingServingSeconds: 0, greetingServingSamples: 0, readyToFlySeconds: 0, readyToFlySamples: 0, postFlightSeconds: 0, postFlightSamples: 0 },
     version: Number(version ?? source.version ?? 0),
     updatedAt: Number(updatedAt ?? source.updatedAt ?? 0),
   };
