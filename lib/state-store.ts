@@ -34,8 +34,10 @@ function parseState(data: unknown, version: unknown, updatedAt: unknown): Shared
         greetingServingSamples: source.dailyService.greetingServingSamples ?? 0,
         readyToFlySeconds: source.dailyService.readyToFlySeconds ?? 0,
         readyToFlySamples: source.dailyService.readyToFlySamples ?? 0,
+        postFlightSeconds: source.dailyService.postFlightSeconds ?? 0,
+        postFlightSamples: source.dailyService.postFlightSamples ?? 0,
       }
-      : { dayKey: "", customersServed: 0, completedServices: 0, totalWaitSeconds: 0, greetingServingSeconds: 0, greetingServingSamples: 0, readyToFlySeconds: 0, readyToFlySamples: 0 },
+      : { dayKey: "", customersServed: 0, completedServices: 0, totalWaitSeconds: 0, greetingServingSeconds: 0, greetingServingSamples: 0, readyToFlySeconds: 0, readyToFlySamples: 0, postFlightSeconds: 0, postFlightSamples: 0 },
     version: Number(version ?? source.version ?? 0),
     updatedAt: Number(updatedAt ?? source.updatedAt ?? 0),
   };
