@@ -79,7 +79,13 @@ function serviceDayKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-const emptyDailyService: DailyServiceMetrics = { dayKey: "", customersServed: 0, completedServices: 0, totalWaitSeconds: 0 };
+const emptyDailyService: DailyServiceMetrics = { dayKey: "", customersServed: 0, completedServices: 0, totalWaitSeconds: 0, greetingServingSeconds: 0, greetingServingSamples: 0, readyToFlySeconds: 0, readyToFlySamples: 0 };
+
+function waitCategory(state: ServiceState) {
+  if (state === "late" || state === "critical") return "ready";
+  if (state === "fresh" || state === "watch" || state === "plating") return "service";
+  return null;
+}
 
 function tableState(ticket: Ticket | undefined, tick: number) {
   if (!ticket) return "clear";
@@ -321,7 +327,8 @@ export default function Home() {
   const longestWait = Math.max(readyTickets[0]?.elapsedSeconds ?? 0, ...manualReadyWaits, 0);
   const currentDayKey = clock ? serviceDayKey(clock) : dailyService.dayKey;
   const todayService = dailyService.dayKey === currentDayKey ? dailyService : emptyDailyService;
-  const averageWait = todayService.completedServices > 0 ? Math.round(todayService.totalWaitSeconds / todayService.completedServices) : 0;
+  const averageGreetingServing = todayService.greetingServingSamples > 0 ? Math.round(todayService.greetingServingSeconds / todayService.greetingServingSamples) : 0;
+  const averageReadyToFly = todayService.readyToFlySamples > 0 ? Math.round(todayService.readyToFlySeconds / todayService.readyToFlySamples) : 0;
 
   function markServed(ticket: Ticket) {
     setTickets((current) => current.filter((item) => item.id !== ticket.id));
@@ -511,10 +518,13 @@ export default function Home() {
       state,
       startedAt: now,
       serviceStartedAt: selectedOverride && selectedOverride.state !== "clear" ? selectedOverride.serviceStartedAt ?? selectedOverride.startedAt : now,
+      categoryStartedAt: selectedOverride && waitCategory(selectedOverride.state) === waitCategory(state)
+        ? selectedOverride.categoryStartedAt ?? selectedOverride.startedAt
+        : now,
     };
     statusOverridesRef.current = { ...statusOverridesRef.current, [selectedObjectKey]: status };
     setStatusOverrides(statusOverridesRef.current);
-    commitOperation({ type: "setStatus", objectKey: selectedObjectKey, status });
+    commitOperation({ type: "setStatus", objectKey: selectedObjectKey, dayKey: serviceDayKey(new Date()), status });
   }
 
   function moveTable(event: React.PointerEvent<HTMLButtonElement>, tableId: number) {
@@ -618,7 +628,7 @@ export default function Home() {
       <section className="workspace">
         <div className="floor-column">
           <div className="workspace-heading">
-            <div className="floor-title"><p className="eyebrow">Live service map</p><div className="floor-title-row"><h1>{activeArea === "indoor" ? "Indoor floor" : "Outdoor floor"}</h1><div className="daily-summary" aria-label="Today's service totals"><span><small>Customers served</small><strong>{todayService.customersServed}</strong></span><span><small>Average wait</small><strong>{formatTimer(averageWait)}</strong></span></div></div></div>
+            <div className="floor-title"><p className="eyebrow">Live service map</p><div className="floor-title-row"><h1>{activeArea === "indoor" ? "Indoor floor" : "Outdoor floor"}</h1><div className="daily-summary" aria-label="Today's service totals"><span><small>Customers served</small><strong>{todayService.customersServed}</strong></span><span><small>Greet / serving avg</small><strong>{formatTimer(averageGreetingServing)}</strong></span><span><small>Ready to fly avg</small><strong>{formatTimer(averageReadyToFly)}</strong></span></div></div></div>
             <div className="heading-actions">
             <div className="view-tabs" role="tablist" aria-label="Floor area">
               <button role="tab" aria-selected={activeArea === "indoor"} className={activeArea === "indoor" ? "active" : ""} onClick={() => switchArea("indoor")}>Indoor <span>{floorTables.filter((table) => table.area === "indoor").length + barChairs.length}</span></button>
