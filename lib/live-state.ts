@@ -19,6 +19,8 @@ export type DailyServiceMetrics = {
   greetingServingSamples: number;
   readyToFlySeconds: number;
   readyToFlySamples: number;
+  postFlightSeconds: number;
+  postFlightSamples: number;
 };
 
 export type FloorTable = {
@@ -144,12 +146,15 @@ function createDailyServiceMetrics(dayKey = ""): DailyServiceMetrics {
     greetingServingSamples: 0,
     readyToFlySeconds: 0,
     readyToFlySamples: 0,
+    postFlightSeconds: 0,
+    postFlightSamples: 0,
   };
 }
 
 function waitCategory(state: ServiceState) {
   if (state === "late" || state === "critical") return "ready";
   if (state === "fresh" || state === "watch" || state === "plating") return "service";
+  if (state === "postflight") return "postflight";
   return null;
 }
 
@@ -163,6 +168,10 @@ function recordCategoryWait(metrics: DailyServiceMetrics, status: StatusOverride
   if (category === "service") {
     metrics.greetingServingSeconds += seconds;
     metrics.greetingServingSamples += 1;
+  }
+  if (category === "postflight") {
+    metrics.postFlightSeconds += seconds;
+    metrics.postFlightSamples += 1;
   }
 }
 
