@@ -13,6 +13,7 @@ import {
   type SharedFloorState,
   type StateOperation,
   type StatusOverride,
+  type YearlyServiceMetrics,
   savedBarChairs,
   savedFloorTables,
 } from "@/lib/live-state";
@@ -81,6 +82,7 @@ function serviceDayKey(date: Date) {
 }
 
 const emptyDailyService: DailyServiceMetrics = { dayKey: "", customersServed: 0, completedServices: 0, totalWaitSeconds: 0, greetingServingSeconds: 0, greetingServingSamples: 0, readyToFlySeconds: 0, readyToFlySamples: 0, postFlightSeconds: 0, postFlightSamples: 0 };
+const emptyYearlyService: YearlyServiceMetrics = { yearKey: "", greetingServingSeconds: 0, greetingServingSamples: 0, readyToFlySeconds: 0, readyToFlySamples: 0, postFlightSeconds: 0, postFlightSamples: 0 };
 
 function waitCategory(state: ServiceState) {
   if (state === "late" || state === "critical") return "ready";
@@ -156,9 +158,11 @@ export default function Home() {
   const [floorObjects, setFloorObjects] = useState<FloorObject[]>([]);
   const [statusOverrides, setStatusOverrides] = useState<Record<string, StatusOverride>>({});
   const [dailyService, setDailyService] = useState<DailyServiceMetrics>(emptyDailyService);
+  const [yearlyService, setYearlyService] = useState<YearlyServiceMetrics>(emptyYearlyService);
   const [selectedChairId, setSelectedChairId] = useState<number | null>(null);
   const [selectedFloorObjectId, setSelectedFloorObjectId] = useState<number | null>(null);
   const [editMode, setEditMode] = useState(false);
+  const [showAverages, setShowAverages] = useState(false);
   const [syncStatus, setSyncStatus] = useState<"connecting" | "live" | "syncing" | "offline">("connecting");
   const [addShape, setAddShape] = useState<Shape>("round");
   const [addObjectType, setAddObjectType] = useState<FloorObjectType>("bush");
@@ -192,6 +196,7 @@ export default function Home() {
     setFloorObjects(migratedObjects);
     setStatusOverrides(migratedStatuses);
     setDailyService(sharedState.dailyService);
+    setYearlyService(sharedState.yearlyService ?? emptyYearlyService);
   }
 
   useEffect(() => {
@@ -201,6 +206,7 @@ export default function Home() {
       indoor: window.localStorage.getItem("mybites-view-flipped-indoor") === "true" || (window.localStorage.getItem("mybites-view-flipped-indoor") === null && previousViewSetting),
       outdoor: window.localStorage.getItem("mybites-view-flipped-outdoor") === "true" || (window.localStorage.getItem("mybites-view-flipped-outdoor") === null && previousViewSetting),
     });
+    setShowAverages(window.localStorage.getItem("mybites-show-averages") === "true");
     const interval = window.setInterval(() => {
       setTick((value) => value + 1);
       setClock(new Date());
@@ -329,9 +335,21 @@ export default function Home() {
   const longestWait = Math.max(readyTickets[0]?.elapsedSeconds ?? 0, ...manualReadyWaits, 0);
   const currentDayKey = clock ? serviceDayKey(clock) : dailyService.dayKey;
   const todayService = dailyService.dayKey === currentDayKey ? dailyService : emptyDailyService;
+  const currentYearKey = currentDayKey.slice(0, 4);
+  const thisYearService = yearlyService.yearKey === currentYearKey ? yearlyService : emptyYearlyService;
   const averageGreetingServing = todayService.greetingServingSamples > 0 ? Math.round(todayService.greetingServingSeconds / todayService.greetingServingSamples) : 0;
   const averageReadyToFly = todayService.readyToFlySamples > 0 ? Math.round(todayService.readyToFlySeconds / todayService.readyToFlySamples) : 0;
   const averagePostFlight = todayService.postFlightSamples > 0 ? Math.round(todayService.postFlightSeconds / todayService.postFlightSamples) : 0;
+  const yearlyAverageGreetingServing = thisYearService.greetingServingSamples > 0 ? Math.round(thisYearService.greetingServingSeconds / thisYearService.greetingServingSamples) : 0;
+  const yearlyAverageReadyToFly = thisYearService.readyToFlySamples > 0 ? Math.round(thisYearService.readyToFlySeconds / thisYearService.readyToFlySamples) : 0;
+  const yearlyAveragePostFlight = thisYearService.postFlightSamples > 0 ? Math.round(thisYearService.postFlightSeconds / thisYearService.postFlightSamples) : 0;
+
+  function toggleAverages() {
+    setShowAverages((current) => {
+      window.localStorage.setItem("mybites-show-averages", String(!current));
+      return !current;
+    });
+  }
 
   function markServed(ticket: Ticket) {
     setTickets((current) => current.filter((item) => item.id !== ticket.id));
@@ -631,7 +649,7 @@ export default function Home() {
       <section className="workspace">
         <div className="floor-column">
           <div className="workspace-heading">
-            <div className="floor-title"><p className="eyebrow">Live service map</p><div className="floor-title-row"><h1>{activeArea === "indoor" ? "Indoor floor" : "Outdoor floor"}</h1><div className="daily-summary" aria-label="Today's service totals"><span><small>Customers served</small><strong>{todayService.customersServed}</strong></span><span><small>Greet / serving avg</small><strong>{formatTimer(averageGreetingServing)}</strong></span><span><small>Ready to fly avg</small><strong>{formatTimer(averageReadyToFly)}</strong></span><span><small>Post Flight avg</small><strong>{formatTimer(averagePostFlight)}</strong></span></div></div></div>
+            <div className="floor-title"><p className="eyebrow">Live service map</p><div className="floor-title-row"><h1>{activeArea === "indoor" ? "Indoor floor" : "Outdoor floor"}</h1><div className="daily-summary" aria-label="Service totals and averages"><span><small>Customers served</small><strong>{todayService.customersServed}</strong></span>{showAverages && <><span><small>Today greet / serving</small><strong>{formatTimer(averageGreetingServing)}</strong></span><span><small>Today ready to fly</small><strong>{formatTimer(averageReadyToFly)}</strong></span><span><small>Today Post Flight</small><strong>{formatTimer(averagePostFlight)}</strong></span><span className="yearly-average"><small>Year greet / serving</small><strong>{formatTimer(yearlyAverageGreetingServing)}</strong></span><span className="yearly-average"><small>Year ready to fly</small><strong>{formatTimer(yearlyAverageReadyToFly)}</strong></span><span className="yearly-average"><small>Year Post Flight</small><strong>{formatTimer(yearlyAveragePostFlight)}</strong></span></>}</div></div></div>
             <div className="heading-actions">
             <div className="view-tabs" role="tablist" aria-label="Floor area">
               <button role="tab" aria-selected={activeArea === "indoor"} className={activeArea === "indoor" ? "active" : ""} onClick={() => switchArea("indoor")}>Indoor <span>{floorTables.filter((table) => table.area === "indoor").length + barChairs.length}</span></button>
@@ -677,6 +695,7 @@ export default function Home() {
             <button className="add-object-button" onClick={addFloorObject}>+ Add object</button>
             <button className="rotate-object-button" onClick={rotateSelectedFloorObject} disabled={!selectedFloorObject}>Rotate object</button>
             <button className="delete-object-button" onClick={removeSelectedFloorObject} disabled={!selectedFloorObject}>Delete object</button>
+            <button className={`toggle-averages${showAverages ? " active" : ""}`} onClick={toggleAverages}>{showAverages ? "Hide averages" : "Show averages"}</button>
             <button className="reset-daily" onClick={resetDailyService}>Reset daily totals</button>
             <button className="reset-layout" onClick={resetLayout}>Clear layout</button>
           </div>}
