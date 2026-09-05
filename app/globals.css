@@ -49,6 +49,9 @@ h1 { margin-bottom:0; font-size:clamp(2rem,3vw,3.2rem); line-height:.95; letter-
 .floor-plan { min-width:850px; min-height:680px; position:relative; overflow:hidden; background-color:#f9f7f0; background-image:linear-gradient(90deg,rgba(48,47,40,.025) 1px,transparent 1px),linear-gradient(rgba(48,47,40,.025) 1px,transparent 1px); background-size:24px 24px; border:1px solid #d5d1c4; border-radius:20px; }
 .combined-floor { width:100%; min-width:0; background:#d9d6cb; }
 .room-grid { position:absolute; inset:0; display:grid; grid-template-columns:70% 30%; gap:3px; }
+.room-grid.patio-left { grid-template-columns:30% 70%; }
+.room-grid.patio-left .area-room.indoor { grid-column:2; border-radius:0 19px 19px 0; }
+.room-grid.patio-left .area-room.outdoor { grid-column:1; grid-row:1; border-radius:19px 0 0 19px; }
 .area-room { min-width:0; position:relative; overflow:hidden; background-color:#f9f7f0; background-image:linear-gradient(90deg,rgba(48,47,40,.025) 1px,transparent 1px),linear-gradient(rgba(48,47,40,.025) 1px,transparent 1px); background-size:24px 24px; }
 .area-room.indoor { border-radius:19px 0 0 19px; }.area-room.outdoor { background-color:#f3f4e9; background-image:linear-gradient(90deg,rgba(65,91,62,.035) 1px,transparent 1px),linear-gradient(rgba(65,91,62,.035) 1px,transparent 1px); border-radius:0 19px 19px 0; }
 .area-room.active { box-shadow:inset 0 0 0 4px rgba(31,93,168,.75); }.room-name { position:absolute; z-index:12; top:12px; left:50%; translate:-50% 0; padding:6px 10px; color:#fff; background:rgba(29,30,26,.8); border-radius:20px; font-size:.62rem; font-weight:900; letter-spacing:.12em; text-transform:uppercase; pointer-events:none; }
