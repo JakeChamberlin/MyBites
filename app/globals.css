@@ -54,7 +54,7 @@ h1 { margin-bottom:0; font-size:clamp(2rem,3vw,3.2rem); line-height:.95; letter-
 .room-grid.patio-left .area-room.outdoor { grid-column:1; grid-row:1; border-radius:19px 0 0 19px; }
 .area-room { min-width:0; position:relative; overflow:hidden; background-color:#f9f7f0; background-image:linear-gradient(90deg,rgba(48,47,40,.025) 1px,transparent 1px),linear-gradient(rgba(48,47,40,.025) 1px,transparent 1px); background-size:24px 24px; }
 .area-room.indoor { border-radius:19px 0 0 19px; }.area-room.outdoor { background-color:#f3f4e9; background-image:linear-gradient(90deg,rgba(65,91,62,.035) 1px,transparent 1px),linear-gradient(rgba(65,91,62,.035) 1px,transparent 1px); border-radius:0 19px 19px 0; }
-.area-room.active { box-shadow:inset 0 0 0 4px rgba(31,93,168,.75); }.room-name { position:absolute; z-index:12; top:12px; left:50%; translate:-50% 0; padding:6px 10px; color:#fff; background:rgba(29,30,26,.8); border-radius:20px; font-size:.62rem; font-weight:900; letter-spacing:.12em; text-transform:uppercase; pointer-events:none; }
+.area-room.active { box-shadow:inset 0 0 0 4px rgba(31,93,168,.75); }
 .area-room.indoor .floor-canvas { --floor-object-scale:.82; }.area-room.indoor .bar-chair { scale:.82; }.area-room.outdoor .floor-canvas { --floor-object-scale:.72; }
 .combined-floor[data-editing="true"] .area-room { background-size:2.5% 2.5%; }.combined-floor[data-editing="true"] .area-room.indoor { background-image:linear-gradient(90deg,rgba(31,93,168,.12) 1px,transparent 1px),linear-gradient(rgba(31,93,168,.12) 1px,transparent 1px); }.combined-floor[data-editing="true"] .area-room.outdoor { background-image:linear-gradient(90deg,rgba(79,121,80,.13) 1px,transparent 1px),linear-gradient(rgba(79,121,80,.13) 1px,transparent 1px); }
 .floor-plan.outdoor { background-color:#f3f4e9; background-image:linear-gradient(90deg,rgba(65,91,62,.035) 1px,transparent 1px),linear-gradient(rgba(65,91,62,.035) 1px,transparent 1px); background-size:24px 24px; border-color:#c9d2bf; }
@@ -144,5 +144,5 @@ h1 { margin-bottom:0; font-size:clamp(2rem,3vw,3.2rem); line-height:.95; letter-
 @media(orientation:portrait) and (max-width:520px){
   .topbar{padding-inline:12px;gap:5px 9px}.brand span{display:none}.brand-logo{width:46px;height:32px}.top-stats{gap:10px}.top-stats span{display:none}.clock{font-size:.78rem}
   .workspace{width:96vw}.workspace-heading h1{font-size:2rem}.heading-actions{align-items:flex-start;flex-wrap:wrap}.map-legend{gap:7px}.map-legend span{font-size:.56rem}
-  .floor-plan{--floor-object-scale:.56;aspect-ratio:4/5}.area-room.indoor .floor-canvas{--floor-object-scale:.48}.area-room.indoor .bar-chair{scale:.5}.area-room.outdoor .floor-canvas{--floor-object-scale:.42}.photo-desk{width:32%}.pass-fixture,.patio-service{width:38%}.room-name{font-size:.5rem;padding:5px 7px}
+  .floor-plan{--floor-object-scale:.56;aspect-ratio:4/5}.area-room.indoor .floor-canvas{--floor-object-scale:.48}.area-room.indoor .bar-chair{scale:.5}.area-room.outdoor .floor-canvas{--floor-object-scale:.42}.photo-desk{width:32%}.pass-fixture,.patio-service{width:38%}
 }
