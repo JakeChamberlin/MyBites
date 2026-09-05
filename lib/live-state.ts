@@ -78,7 +78,6 @@ export type StateOperation =
   | { type: "deleteChair"; chairId: number }
   | { type: "upsertObject"; object: FloorObject }
   | { type: "deleteObject"; objectId: number }
-  | { type: "clearArea"; area: Area }
   | { type: "setStatus"; objectKey: string; dayKey: string; status: StatusOverride }
   | { type: "completeService"; objectKey: string; dayKey: string; customers: number }
   | { type: "resetDailyService"; dayKey: string }
@@ -219,13 +218,6 @@ export function applyStateOperation(state: SharedFloorState, operation: StateOpe
     case "deleteObject":
       next.floorObjects = next.floorObjects.filter((object) => object.id !== operation.objectId);
       break;
-    case "clearArea": {
-      const removedTableIds = new Set(next.floorTables.filter((table) => table.area === operation.area).map((table) => table.id));
-      next.floorTables = next.floorTables.filter((table) => table.area !== operation.area);
-      next.floorObjects = next.floorObjects.filter((object) => object.area !== operation.area);
-      for (const tableId of removedTableIds) delete next.statusOverrides[`table:${tableId}`];
-      break;
-    }
     case "setStatus": {
       if (next.dailyService.dayKey !== operation.dayKey) next.dailyService = createDailyServiceMetrics(operation.dayKey);
       const yearKey = operation.dayKey.slice(0, 4);
