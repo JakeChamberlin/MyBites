@@ -501,8 +501,11 @@ export default function Home() {
   function toggleViewRotation(area: Area) {
     setRotationAnimating(true);
     setFlippedViews((current) => {
-      const next = { ...current, [area]: !current[area] };
-      window.localStorage.setItem(`mybites-view-flipped-${area}`, String(next[area]));
+      const flipped = !current[area];
+      const next = { indoor: flipped, outdoor: flipped };
+      window.localStorage.setItem("mybites-view-flipped", String(flipped));
+      window.localStorage.setItem("mybites-view-flipped-indoor", String(flipped));
+      window.localStorage.setItem("mybites-view-flipped-outdoor", String(flipped));
       return next;
     });
   }
@@ -732,7 +735,7 @@ export default function Home() {
                     }}
                   >
                     <div className="room-name">{area === "indoor" ? "Indoor" : "Patio"}</div>
-                    <div className={`floor-canvas${areaFlipped ? " flipped" : ""}${rotationAnimating && activeArea === area ? " animate-rotation" : ""}`} onTransitionEnd={() => setRotationAnimating(false)}>
+                    <div className={`floor-canvas${areaFlipped ? " flipped" : ""}${rotationAnimating ? " animate-rotation" : ""}`} onTransitionEnd={() => setRotationAnimating(false)}>
                       {area === "indoor" ? <>
                         <div className="bar-fixture"><span>BAR</span></div>
                         <div className="pass-fixture"><span>Indoor</span><strong>{waitingCounts.indoor}</strong><small>waiting</small></div>
@@ -860,9 +863,9 @@ export default function Home() {
                     <button
                       className="rotate-view-button"
                       onClick={(event) => { event.stopPropagation(); setActiveArea(area); toggleViewRotation(area); }}
-                      aria-label={areaFlipped ? `Rotate ${area === "indoor" ? "Indoor" : "Patio"} view upright` : `Rotate ${area === "indoor" ? "Indoor" : "Patio"} view upside down`}
+                      aria-label={areaFlipped ? "Rotate both rooms upright" : "Rotate both rooms upside down"}
                       aria-pressed={areaFlipped}
-                      title={`Rotate ${area === "indoor" ? "Indoor" : "Patio"} view 180 degrees`}
+                      title="Rotate both rooms 180 degrees"
                     >↻</button>
                   </section>;
                 })}
