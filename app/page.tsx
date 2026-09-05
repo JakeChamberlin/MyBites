@@ -234,6 +234,14 @@ export default function Home() {
             if (bootstrapResponse.ok) sharedState = await bootstrapResponse.json() as SharedFloorState;
           }
         }
+        if (initial && (sharedState.floorTables.some((table) => table.area === "outdoor") || sharedState.floorObjects.some((object) => object.area === "outdoor"))) {
+          const clearPatioResponse = await fetch("/api/state", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ type: "clearArea", area: "outdoor" } satisfies StateOperation),
+          });
+          if (clearPatioResponse.ok) sharedState = await clearPatioResponse.json() as SharedFloorState;
+        }
         if (initial && hasPreviousIndoorOrientation(sharedState)) {
           const migratedFloorTables = sharedState.floorTables.map((table) => {
             const savedTable = savedFloorTables.find((candidate) => candidate.label === table.label);
@@ -298,30 +306,27 @@ export default function Home() {
 
   const visibleTickets = useMemo(() => tickets.map((ticket) => ({ ...ticket, elapsedSeconds: ticket.elapsedSeconds + tick })), [tickets, tick]);
   const readyTickets = visibleTickets.filter((ticket) => ticket.status === "ready").sort((a, b) => b.elapsedSeconds - a.elapsedSeconds);
-  const visibleFloorTables = floorTables.filter((table) => table.area === activeArea);
-  const visibleFloorObjects = floorObjects.filter((object) => object.area === activeArea);
-  const areaReadyTickets = readyTickets.filter((ticket) => activeArea === "outdoor" ? ticket.zone === "Patio" : ticket.zone !== "Patio");
   const manualReadyStatuses = Object.entries(statusOverrides).filter(([, status]) => status.state === "late" || status.state === "critical");
   const manualStatusArea = (objectKey: string): Area | undefined => {
     const [objectType, objectId] = objectKey.split(":");
     if (objectType === "chair") return "indoor";
     return floorTables.find((candidate) => String(candidate.id) === objectId)?.area;
   };
-  const areaManualReadyCount = manualReadyStatuses.filter(([objectKey]) => {
-    return manualStatusArea(objectKey) === activeArea;
-  }).length;
-  const outdoorReadyCount = readyTickets.filter((ticket) => ticket.zone === "Patio").length
-    + manualReadyStatuses.filter(([objectKey]) => manualStatusArea(objectKey) === "outdoor").length;
+  const waitingCounts: Record<Area, number> = {
+    indoor: readyTickets.filter((ticket) => ticket.zone !== "Patio").length + manualReadyStatuses.filter(([objectKey]) => manualStatusArea(objectKey) === "indoor").length,
+    outdoor: readyTickets.filter((ticket) => ticket.zone === "Patio").length + manualReadyStatuses.filter(([objectKey]) => manualStatusArea(objectKey) === "outdoor").length,
+  };
   const totalReadyCount = readyTickets.length + manualReadyStatuses.length;
-  const areaWaitingCount = areaReadyTickets.length + areaManualReadyCount;
   const selectedTable = floorTables.find((table) => table.id === selectedId);
   const selectedChair = barChairs.find((chair) => chair.id === selectedChairId);
   const selectedFloorObject = floorObjects.find((object) => object.id === selectedFloorObjectId);
-  const viewFlipped = flippedViews[activeArea];
+  const selectedArea: Area = selectedChair ? "indoor" : selectedTable?.area ?? selectedFloorObject?.area ?? activeArea;
+  const viewFlipped = flippedViews[selectedArea];
   const selectedFloorX = selectedTable?.x ?? selectedChair?.x ?? 50;
   const selectedFloorY = selectedTable?.y ?? selectedChair?.y ?? 50;
   const selectedViewX = viewFlipped ? 100 - selectedFloorX : selectedFloorX;
   const selectedViewY = viewFlipped ? 100 - selectedFloorY : selectedFloorY;
+  const selectedCombinedX = selectedArea === "indoor" ? selectedViewX * 0.7 : 70 + selectedViewX * 0.3;
   const selectedTicket = selectedChair
     ? visibleTickets.find((ticket) => ticket.zone === "Bar" && ticket.table === selectedChair.label)
     : visibleTickets.find((ticket) => ticket.id === selectedId);
@@ -493,11 +498,11 @@ export default function Home() {
     commitOperation({ type: "resetDailyService", dayKey: serviceDayKey(new Date()) });
   }
 
-  function toggleViewRotation() {
+  function toggleViewRotation(area: Area) {
     setRotationAnimating(true);
     setFlippedViews((current) => {
-      const next = { ...current, [activeArea]: !current[activeArea] };
-      window.localStorage.setItem(`mybites-view-flipped-${activeArea}`, String(next[activeArea]));
+      const next = { ...current, [area]: !current[area] };
+      window.localStorage.setItem(`mybites-view-flipped-${area}`, String(next[area]));
       return next;
     });
   }
@@ -550,17 +555,20 @@ export default function Home() {
 
   function moveTable(event: React.PointerEvent<HTMLButtonElement>, tableId: number) {
     if (!editMode || !event.currentTarget.hasPointerCapture(event.pointerId)) return;
+    const movingTable = floorTablesRef.current.find((table) => table.id === tableId);
+    if (!movingTable) return;
     event.currentTarget.dataset.dragged = "true";
     const floor = event.currentTarget.parentElement?.getBoundingClientRect();
     if (!floor) return;
     const pointerX = ((event.clientX - floor.left) / floor.width) * 100;
     const pointerY = ((event.clientY - floor.top) / floor.height) * 100;
-    const rawX = viewFlipped ? 100 - pointerX : pointerX;
-    const rawY = viewFlipped ? 100 - pointerY : pointerY;
+    const areaFlipped = flippedViews[movingTable.area];
+    const rawX = areaFlipped ? 100 - pointerX : pointerX;
+    const rawY = areaFlipped ? 100 - pointerY : pointerY;
     const alignmentObjects = [
-      ...floorTables.filter((table) => table.id !== tableId && table.area === activeArea),
-      ...(activeArea === "indoor" ? barChairs : []),
-      ...visibleFloorObjects,
+      ...floorTables.filter((table) => table.id !== tableId && table.area === movingTable.area),
+      ...(movingTable.area === "indoor" ? barChairs : []),
+      ...floorObjects.filter((object) => object.area === movingTable.area),
     ];
     const snappedX = snapToObjects(rawX, alignmentObjects.map((object) => object.x));
     const snappedY = snapToObjects(rawY, alignmentObjects.map((object) => object.y));
@@ -578,8 +586,8 @@ export default function Home() {
     if (!floor) return;
     const pointerX = ((event.clientX - floor.left) / floor.width) * 100;
     const pointerY = ((event.clientY - floor.top) / floor.height) * 100;
-    const rawX = viewFlipped ? 100 - pointerX : pointerX;
-    const rawY = viewFlipped ? 100 - pointerY : pointerY;
+    const rawX = flippedViews.indoor ? 100 - pointerX : pointerX;
+    const rawY = flippedViews.indoor ? 100 - pointerY : pointerY;
     const alignmentObjects = [
       ...floorTables.filter((table) => table.area === "indoor"),
       ...barChairs.filter((chair) => chair.id !== chairId),
@@ -596,17 +604,20 @@ export default function Home() {
 
   function moveFloorObject(event: React.PointerEvent<HTMLButtonElement>, objectId: number) {
     if (!editMode || !event.currentTarget.hasPointerCapture(event.pointerId)) return;
+    const movingObject = floorObjectsRef.current.find((object) => object.id === objectId);
+    if (!movingObject) return;
     event.currentTarget.dataset.dragged = "true";
     const floor = event.currentTarget.parentElement?.getBoundingClientRect();
     if (!floor) return;
     const pointerX = ((event.clientX - floor.left) / floor.width) * 100;
     const pointerY = ((event.clientY - floor.top) / floor.height) * 100;
-    const rawX = viewFlipped ? 100 - pointerX : pointerX;
-    const rawY = viewFlipped ? 100 - pointerY : pointerY;
+    const areaFlipped = flippedViews[movingObject.area];
+    const rawX = areaFlipped ? 100 - pointerX : pointerX;
+    const rawY = areaFlipped ? 100 - pointerY : pointerY;
     const alignmentObjects = [
-      ...floorTables.filter((table) => table.area === activeArea),
-      ...(activeArea === "indoor" ? barChairs : []),
-      ...floorObjects.filter((object) => object.id !== objectId && object.area === activeArea),
+      ...floorTables.filter((table) => table.area === movingObject.area),
+      ...(movingObject.area === "indoor" ? barChairs : []),
+      ...floorObjects.filter((object) => object.id !== objectId && object.area === movingObject.area),
     ];
     const snappedX = snapToObjects(rawX, alignmentObjects.map((object) => object.x));
     const snappedY = snapToObjects(rawY, alignmentObjects.map((object) => object.y));
@@ -649,15 +660,8 @@ export default function Home() {
       <section className="workspace">
         <div className="floor-column">
           <div className="workspace-heading">
-            <div className="floor-title"><p className="eyebrow">Live service map</p><div className="floor-title-row"><h1>{activeArea === "indoor" ? "Indoor floor" : "Outdoor floor"}</h1><div className="daily-summary" aria-label="Service totals and averages"><span><small>Customers served</small><strong>{todayService.customersServed}</strong></span>{showAverages && <><span><small>Today greet / serving</small><strong>{formatTimer(averageGreetingServing)}</strong></span><span><small>Today ready to fly</small><strong>{formatTimer(averageReadyToFly)}</strong></span><span><small>Today Post Flight</small><strong>{formatTimer(averagePostFlight)}</strong></span><span className="yearly-average"><small>Year greet / serving</small><strong>{formatTimer(yearlyAverageGreetingServing)}</strong></span><span className="yearly-average"><small>Year ready to fly</small><strong>{formatTimer(yearlyAverageReadyToFly)}</strong></span><span className="yearly-average"><small>Year Post Flight</small><strong>{formatTimer(yearlyAveragePostFlight)}</strong></span></>}</div></div></div>
+            <div className="floor-title"><p className="eyebrow">Live service map</p><div className="floor-title-row"><h1>Indoor + Patio</h1><div className="daily-summary" aria-label="Service totals and averages"><span><small>Customers served</small><strong>{todayService.customersServed}</strong></span>{showAverages && <><span><small>Today greet / serving</small><strong>{formatTimer(averageGreetingServing)}</strong></span><span><small>Today ready to fly</small><strong>{formatTimer(averageReadyToFly)}</strong></span><span><small>Today Post Flight</small><strong>{formatTimer(averagePostFlight)}</strong></span><span className="yearly-average"><small>Year greet / serving</small><strong>{formatTimer(yearlyAverageGreetingServing)}</strong></span><span className="yearly-average"><small>Year ready to fly</small><strong>{formatTimer(yearlyAverageReadyToFly)}</strong></span><span className="yearly-average"><small>Year Post Flight</small><strong>{formatTimer(yearlyAveragePostFlight)}</strong></span></>}</div></div></div>
             <div className="heading-actions">
-            <div className="view-tabs" role="tablist" aria-label="Floor area">
-              <button role="tab" aria-selected={activeArea === "indoor"} className={activeArea === "indoor" ? "active" : ""} onClick={() => switchArea("indoor")}>Indoor <span>{floorTables.filter((table) => table.area === "indoor").length + barChairs.length}</span></button>
-              <div className="area-tab-wrap" role="presentation">
-                {activeArea === "indoor" && outdoorReadyCount > 0 && <small className="outdoor-ready-alert" role="status">Outdoor table ready to fly</small>}
-                <button role="tab" aria-selected={activeArea === "outdoor"} className={activeArea === "outdoor" ? "active" : activeArea === "indoor" && outdoorReadyCount > 0 ? "outdoor-ready" : ""} onClick={() => switchArea("outdoor")}>Outdoor <span>{floorTables.filter((table) => table.area === "outdoor").length}</span></button>
-              </div>
-            </div>
             <div className="map-legend" aria-label="Table status legend">
               <span><i className="key greeting" /> Needs to be greeted</span>
               <span><i className="key critical" /> Overdue</span>
@@ -681,6 +685,10 @@ export default function Home() {
 
           {editMode && <div className="editor-bar" role="toolbar" aria-label="Floor layout editor">
             <div className="editor-intro"><strong>Layout editor</strong><span>Drag tables, chairs, and objects · Smart alignment on</span></div>
+            <div className="area-picker" aria-label="Area to edit">
+              <button className={activeArea === "indoor" ? "active" : ""} onClick={() => switchArea("indoor")}>Indoor</button>
+              <button className={activeArea === "outdoor" ? "active" : ""} onClick={() => switchArea("outdoor")}>Patio</button>
+            </div>
             <div className="shape-picker">
               {(["round", "square", "booth"] as Shape[]).map((shape) => <button key={shape} className={addShape === shape ? "active" : ""} onClick={() => setAddShape(shape)}><i className={`shape-icon ${shape}`} />{shape}</button>)}
             </div>
@@ -702,173 +710,170 @@ export default function Home() {
 
           <div className="floor-scroll">
             <section
-              className={`floor-plan ${activeArea}`}
-              aria-label={`${activeArea} restaurant floor plan`}
+              className="floor-plan combined-floor"
+              aria-label="Indoor and patio restaurant floor plan"
               data-editing={editMode ? "true" : "false"}
-              onClick={(event) => {
-                if ((event.target as HTMLElement).closest(".floor-table,.bar-chair,.floor-object")) return;
-                setSelectedId(0);
-                setSelectedChairId(null);
-                setSelectedFloorObjectId(null);
-              }}
             >
-              <div className={`floor-canvas${viewFlipped ? " flipped" : ""}${rotationAnimating ? " animate-rotation" : ""}`} onTransitionEnd={() => setRotationAnimating(false)}>
-              {activeArea === "indoor" ? <>
-                <div className="bar-fixture"><span>BAR</span></div>
-                <div className="pass-fixture"><span>Indoor</span><strong>{areaWaitingCount}</strong><small>waiting</small></div>
-                <div className="photo-desk"><span>PHOTO DESK</span></div>
-              </> : <>
-                <div className="patio-service"><span>Patio</span><strong>{areaWaitingCount}</strong><small>waiting</small></div>
-              </>}
-
-              {editMode && snapGuides.x !== null && <div className="snap-guide vertical" style={{ left: `${snapGuides.x}%` }} />}
-              {editMode && snapGuides.y !== null && <div className="snap-guide horizontal" style={{ top: `${snapGuides.y}%` }} />}
-
-              {visibleFloorObjects.map((object) => <button
-                key={object.id}
-                className={`floor-object ${object.type}${selectedFloorObjectId === object.id ? " selected" : ""}`}
-                style={{ left: `${object.x}%`, top: `${object.y}%`, transform: `translate(-50%, -50%) rotate(${object.rotation ?? 0}deg) scale(var(--floor-object-scale, 1))` }}
-                onClick={(event) => {
-                  if (!editMode) return;
-                  if (event.currentTarget.dataset.dragged === "true") {
-                    event.currentTarget.dataset.dragged = "false";
-                    return;
-                  }
-                  setSelectedFloorObjectId(object.id);
-                  setSelectedId(0);
-                  setSelectedChairId(null);
-                }}
-                onPointerDown={(event) => {
-                  if (!editMode) return;
-                  event.preventDefault();
-                  draggingRef.current = true;
-                  event.currentTarget.dataset.dragged = "false";
-                  event.currentTarget.setPointerCapture(event.pointerId);
-                }}
-                onPointerMove={(event) => moveFloorObject(event, object.id)}
-                onPointerUp={(event) => {
-                  if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-                  finishMoving("object", object.id);
-                }}
-                onPointerCancel={() => finishMoving()}
-                aria-label={`${object.type === "firepit" ? "Fire pit" : object.type} floor object${editMode ? ", drag to move" : ""}`}
-                aria-pressed={selectedFloorObjectId === object.id}
-                tabIndex={editMode ? 0 : -1}
-                data-editing={editMode ? "true" : "false"}
-              >
-                {object.type === "bush" && <><span /><span /><span /></>}
-                {object.type === "firepit" && Array.from({ length: 8 }, (_, index) => <span key={index} />)}
-                {object.type === "door" && <span />}
-              </button>)}
-
-              {activeArea === "indoor" && barChairs.map((chair) => {
-                const ticket = visibleTickets.find((item) => item.zone === "Bar" && item.table === chair.label);
-                const override = statusOverrides[`chair:${chair.id}`];
-                const state = override?.state ?? tableState(ticket, 0);
-                const elapsed = override
-                  ? Math.max(0, Math.floor(((clock?.getTime() ?? override.startedAt) - override.startedAt) / 1000))
-                  : ticket?.elapsedSeconds ?? 0;
-                return <button
-                  key={chair.id}
-                  className={`bar-chair state-${state}${selectedChairId === chair.id ? " selected" : ""}`}
-                  style={{ left: `${chair.x}%`, top: `${chair.y}%` }}
-                  onClick={(event) => {
-                    if (event.currentTarget.dataset.dragged === "true") {
-                      event.currentTarget.dataset.dragged = "false";
-                      return;
-                    }
-                    setSelectedChairId(chair.id);
-                    setSelectedId(0);
-                    setSelectedFloorObjectId(null);
-                  }}
-                  onPointerDown={(event) => {
-                    if (!editMode) return;
-                    event.preventDefault();
-                    draggingRef.current = true;
-                    event.currentTarget.dataset.dragged = "false";
-                    event.currentTarget.setPointerCapture(event.pointerId);
-                  }}
-                  onPointerMove={(event) => moveBarChair(event, chair.id)}
-                  onPointerUp={(event) => {
-                    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-                    finishMoving("chair", chair.id);
-                  }}
-                  onPointerCancel={() => finishMoving()}
-                  aria-label={`Bar seat ${chair.label}, ${ticket ? state : "clear"}${editMode ? ", drag to move" : ""}`}
-                  aria-pressed={selectedChairId === chair.id}
-                  data-editing={editMode ? "true" : "false"}
-                ><span>{chair.label}</span>{state !== "clear" && <small>{state === "plating" ? "S" : state === "postflight" ? "PF" : state === "late" ? formatTimer(elapsed) : Math.floor(elapsed / 60)}</small>}</button>;
-              })}
-
-              {visibleFloorTables.map((table) => {
-                const ticket = visibleTickets.find((item) => item.id === table.id);
-                const override = statusOverrides[`table:${table.id}`];
-                const state = override?.state ?? tableState(ticket, 0);
-                const elapsed = override
-                  ? Math.max(0, Math.floor(((clock?.getTime() ?? override.startedAt) - override.startedAt) / 1000))
-                  : ticket?.elapsedSeconds ?? 0;
-                const selected = selectedId === table.id;
-                return (
-                  <button
-                    key={table.id}
-                    className={`floor-table ${table.shape} state-${state}${selected ? " selected" : ""}`}
-                    style={{
-                      left: `${table.x}%`,
-                      top: `${table.y}%`,
-                      transform: `translate(-50%, -50%) rotate(${table.rotation ?? 0}deg) scale(var(--floor-object-scale, 1))`,
-                      "--table-counter-rotation": `${-(table.rotation ?? 0)}deg`,
-                    } as React.CSSProperties & Record<"--table-counter-rotation", string>}
+              <div className="room-grid">
+                {(["indoor", "outdoor"] as Area[]).map((area) => {
+                  const areaTables = floorTables.filter((table) => table.area === area);
+                  const areaObjects = floorObjects.filter((object) => object.area === area);
+                  const areaFlipped = flippedViews[area];
+                  return <section
+                    key={area}
+                    className={`area-room ${area}${editMode && activeArea === area ? " active" : ""}`}
+                    aria-label={`${area === "indoor" ? "Indoor" : "Patio"} area`}
                     onClick={(event) => {
-                      if (event.currentTarget.dataset.dragged === "true") {
-                        event.currentTarget.dataset.dragged = "false";
-                        return;
-                      }
-                      setSelectedId(table.id);
+                      if ((event.target as HTMLElement).closest(".floor-table,.bar-chair,.floor-object,.rotate-view-button")) return;
+                      setActiveArea(area);
+                      setSelectedId(0);
                       setSelectedChairId(null);
                       setSelectedFloorObjectId(null);
                     }}
-                    onPointerDown={(event) => {
-                      if (!editMode) return;
-                      event.preventDefault();
-                      draggingRef.current = true;
-                      event.currentTarget.dataset.dragged = "false";
-                      event.currentTarget.setPointerCapture(event.pointerId);
-                    }}
-                    onPointerMove={(event) => moveTable(event, table.id)}
-                    onPointerUp={(event) => {
-                      if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-                      finishMoving("table", table.id);
-                    }}
-                    onPointerCancel={() => finishMoving()}
-                    aria-label={`Table ${table.label}, ${statusLabel(state)}`}
-                    aria-pressed={selected}
-                    data-editing={editMode ? "true" : "false"}
                   >
-                    <span className="chair chair-a" /><span className="chair chair-b" />
-                    {(table.shape === "booth" || table.seats >= 4) && <><span className="chair chair-c" /><span className="chair chair-d" /></>}
-                    <span className="table-copy">
-                      <span className="table-number">{table.label}</span>
-                      <span className="table-time">{override ? state === "late" ? `FLY ${formatTimer(elapsed)}` : shortStatusLabel(state) : ticket ? ticket.status === "plating" ? "SERVING" : formatTimer(ticket.elapsedSeconds) : "CLEAR"}</span>
-                    </span>
-                  </button>
-                );
-              })}
+                    <div className="room-name">{area === "indoor" ? "Indoor" : "Patio"}</div>
+                    <div className={`floor-canvas${areaFlipped ? " flipped" : ""}${rotationAnimating && activeArea === area ? " animate-rotation" : ""}`} onTransitionEnd={() => setRotationAnimating(false)}>
+                      {area === "indoor" ? <>
+                        <div className="bar-fixture"><span>BAR</span></div>
+                        <div className="pass-fixture"><span>Indoor</span><strong>{waitingCounts.indoor}</strong><small>waiting</small></div>
+                        <div className="photo-desk"><span>PHOTO DESK</span></div>
+                      </> : <div className="patio-service"><span>Patio</span><strong>{waitingCounts.outdoor}</strong><small>waiting</small></div>}
+
+                      {editMode && activeArea === area && snapGuides.x !== null && <div className="snap-guide vertical" style={{ left: `${snapGuides.x}%` }} />}
+                      {editMode && activeArea === area && snapGuides.y !== null && <div className="snap-guide horizontal" style={{ top: `${snapGuides.y}%` }} />}
+
+                      {areaObjects.map((object) => <button
+                        key={object.id}
+                        className={`floor-object ${object.type}${selectedFloorObjectId === object.id ? " selected" : ""}`}
+                        style={{ left: `${object.x}%`, top: `${object.y}%`, transform: `translate(-50%, -50%) rotate(${object.rotation ?? 0}deg) scale(var(--floor-object-scale, 1))` }}
+                        onClick={(event) => {
+                          if (!editMode) return;
+                          if (event.currentTarget.dataset.dragged === "true") { event.currentTarget.dataset.dragged = "false"; return; }
+                          setActiveArea(area);
+                          setSelectedFloorObjectId(object.id);
+                          setSelectedId(0);
+                          setSelectedChairId(null);
+                        }}
+                        onPointerDown={(event) => {
+                          if (!editMode) return;
+                          event.preventDefault();
+                          draggingRef.current = true;
+                          event.currentTarget.dataset.dragged = "false";
+                          event.currentTarget.setPointerCapture(event.pointerId);
+                        }}
+                        onPointerMove={(event) => moveFloorObject(event, object.id)}
+                        onPointerUp={(event) => {
+                          if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+                          finishMoving("object", object.id);
+                        }}
+                        onPointerCancel={() => finishMoving()}
+                        aria-label={`${object.type === "firepit" ? "Fire pit" : object.type} floor object${editMode ? ", drag to move" : ""}`}
+                        aria-pressed={selectedFloorObjectId === object.id}
+                        tabIndex={editMode ? 0 : -1}
+                        data-editing={editMode ? "true" : "false"}
+                      >
+                        {object.type === "bush" && <><span /><span /><span /></>}
+                        {object.type === "firepit" && Array.from({ length: 8 }, (_, index) => <span key={index} />)}
+                        {object.type === "door" && <span />}
+                      </button>)}
+
+                      {area === "indoor" && barChairs.map((chair) => {
+                        const ticket = visibleTickets.find((item) => item.zone === "Bar" && item.table === chair.label);
+                        const override = statusOverrides[`chair:${chair.id}`];
+                        const state = override?.state ?? tableState(ticket, 0);
+                        const elapsed = override ? Math.max(0, Math.floor(((clock?.getTime() ?? override.startedAt) - override.startedAt) / 1000)) : ticket?.elapsedSeconds ?? 0;
+                        return <button
+                          key={chair.id}
+                          className={`bar-chair state-${state}${selectedChairId === chair.id ? " selected" : ""}`}
+                          style={{ left: `${chair.x}%`, top: `${chair.y}%` }}
+                          onClick={(event) => {
+                            if (event.currentTarget.dataset.dragged === "true") { event.currentTarget.dataset.dragged = "false"; return; }
+                            setActiveArea("indoor");
+                            setSelectedChairId(chair.id);
+                            setSelectedId(0);
+                            setSelectedFloorObjectId(null);
+                          }}
+                          onPointerDown={(event) => {
+                            if (!editMode) return;
+                            event.preventDefault();
+                            draggingRef.current = true;
+                            event.currentTarget.dataset.dragged = "false";
+                            event.currentTarget.setPointerCapture(event.pointerId);
+                          }}
+                          onPointerMove={(event) => moveBarChair(event, chair.id)}
+                          onPointerUp={(event) => {
+                            if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+                            finishMoving("chair", chair.id);
+                          }}
+                          onPointerCancel={() => finishMoving()}
+                          aria-label={`Bar seat ${chair.label}, ${ticket ? state : "clear"}${editMode ? ", drag to move" : ""}`}
+                          aria-pressed={selectedChairId === chair.id}
+                          data-editing={editMode ? "true" : "false"}
+                        ><span>{chair.label}</span>{state !== "clear" && <small>{state === "plating" ? "S" : state === "postflight" ? "PF" : state === "late" ? formatTimer(elapsed) : Math.floor(elapsed / 60)}</small>}</button>;
+                      })}
+
+                      {areaTables.map((table) => {
+                        const ticket = visibleTickets.find((item) => item.id === table.id);
+                        const override = statusOverrides[`table:${table.id}`];
+                        const state = override?.state ?? tableState(ticket, 0);
+                        const elapsed = override ? Math.max(0, Math.floor(((clock?.getTime() ?? override.startedAt) - override.startedAt) / 1000)) : ticket?.elapsedSeconds ?? 0;
+                        const selected = selectedId === table.id;
+                        return <button
+                          key={table.id}
+                          className={`floor-table ${table.shape} state-${state}${selected ? " selected" : ""}`}
+                          style={{
+                            left: `${table.x}%`,
+                            top: `${table.y}%`,
+                            transform: `translate(-50%, -50%) rotate(${table.rotation ?? 0}deg) scale(var(--floor-object-scale, 1))`,
+                            "--table-counter-rotation": `${-(table.rotation ?? 0)}deg`,
+                          } as React.CSSProperties & Record<"--table-counter-rotation", string>}
+                          onClick={(event) => {
+                            if (event.currentTarget.dataset.dragged === "true") { event.currentTarget.dataset.dragged = "false"; return; }
+                            setActiveArea(area);
+                            setSelectedId(table.id);
+                            setSelectedChairId(null);
+                            setSelectedFloorObjectId(null);
+                          }}
+                          onPointerDown={(event) => {
+                            if (!editMode) return;
+                            event.preventDefault();
+                            draggingRef.current = true;
+                            event.currentTarget.dataset.dragged = "false";
+                            event.currentTarget.setPointerCapture(event.pointerId);
+                          }}
+                          onPointerMove={(event) => moveTable(event, table.id)}
+                          onPointerUp={(event) => {
+                            if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+                            finishMoving("table", table.id);
+                          }}
+                          onPointerCancel={() => finishMoving()}
+                          aria-label={`Table ${table.label}, ${statusLabel(state)}`}
+                          aria-pressed={selected}
+                          data-editing={editMode ? "true" : "false"}
+                        >
+                          <span className="chair chair-a" /><span className="chair chair-b" />
+                          {(table.shape === "booth" || table.seats >= 4) && <><span className="chair chair-c" /><span className="chair chair-d" /></>}
+                          <span className="table-copy"><span className="table-number">{table.label}</span><span className="table-time">{override ? state === "late" ? `FLY ${formatTimer(elapsed)}` : shortStatusLabel(state) : ticket ? ticket.status === "plating" ? "SERVING" : formatTimer(ticket.elapsedSeconds) : "CLEAR"}</span></span>
+                        </button>;
+                      })}
+                    </div>
+                    <button
+                      className="rotate-view-button"
+                      onClick={(event) => { event.stopPropagation(); setActiveArea(area); toggleViewRotation(area); }}
+                      aria-label={areaFlipped ? `Rotate ${area === "indoor" ? "Indoor" : "Patio"} view upright` : `Rotate ${area === "indoor" ? "Indoor" : "Patio"} view upside down`}
+                      aria-pressed={areaFlipped}
+                      title={`Rotate ${area === "indoor" ? "Indoor" : "Patio"} view 180 degrees`}
+                    >↻</button>
+                  </section>;
+                })}
               </div>
 
-              <button
-                className="rotate-view-button"
-                onClick={(event) => { event.stopPropagation(); toggleViewRotation(); }}
-                aria-label={viewFlipped ? "Rotate floor view upright" : "Rotate floor view upside down"}
-                aria-pressed={viewFlipped}
-                title={viewFlipped ? "Rotate view upright" : "Rotate view 180 degrees"}
-              >↻</button>
-
               {selectedObjectKey && (selectedTable || selectedChair) && <section
-                className={`selected-panel selection-dialog floor-popover ${(selectedViewX > 58) ? "opens-left" : "opens-right"}`}
+                className={`selected-panel selection-dialog floor-popover ${(selectedCombinedX > 58) ? "opens-left" : "opens-right"}`}
                 role="dialog"
                 aria-label={`Table ${selectedTable?.label ?? selectedChair?.label} details`}
                 style={{
-                  left: `clamp(200px, calc(${selectedViewX}% + ${(selectedViewX > 58) ? -220 : 220}px), calc(100% - 200px))`,
+                  left: `clamp(200px, calc(${selectedCombinedX}% + ${(selectedCombinedX > 58) ? -220 : 220}px), calc(100% - 200px))`,
                   top: `clamp(185px, ${selectedViewY}%, calc(100% - 185px))`,
                 }}
                 onClick={(event) => event.stopPropagation()}
