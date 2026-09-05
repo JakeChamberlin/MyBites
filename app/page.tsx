@@ -733,7 +733,6 @@ export default function Home() {
                       setSelectedFloorObjectId(null);
                     }}
                   >
-                    <div className="room-name">{area === "indoor" ? "Indoor" : "Patio"}</div>
                     <div className={`floor-canvas${areaFlipped ? " flipped" : ""}${rotationAnimating ? " animate-rotation" : ""}`} onTransitionEnd={() => setRotationAnimating(false)}>
                       {area === "indoor" ? <>
                         <div className="bar-fixture"><span>BAR</span></div>
