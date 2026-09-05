@@ -238,14 +238,6 @@ export default function Home() {
             if (bootstrapResponse.ok) sharedState = await bootstrapResponse.json() as SharedFloorState;
           }
         }
-        if (initial && (sharedState.floorTables.some((table) => table.area === "outdoor") || sharedState.floorObjects.some((object) => object.area === "outdoor"))) {
-          const clearPatioResponse = await fetch("/api/state", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ type: "clearArea", area: "outdoor" } satisfies StateOperation),
-          });
-          if (clearPatioResponse.ok) sharedState = await clearPatioResponse.json() as SharedFloorState;
-        }
         if (initial && hasPreviousIndoorOrientation(sharedState)) {
           const migratedFloorTables = sharedState.floorTables.map((table) => {
             const savedTable = savedFloorTables.find((candidate) => candidate.label === table.label);
