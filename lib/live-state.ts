@@ -97,6 +97,16 @@ export const savedFloorTables: FloorTable[] = [
   { id: 9, label: "104", x: 12.5, y: 72.5, shape: "square", seats: 2, area: "indoor", rotation: 90 },
   { id: 10, label: "204", x: 12.5, y: 55, shape: "square", seats: 2, area: "indoor", rotation: 90 },
   { id: 11, label: "303", x: 12.5, y: 35, shape: "booth", seats: 4, area: "indoor", rotation: 90 },
+  { id: 1788626546577253, label: "P1", x: 60, y: 20, shape: "square", seats: 4, area: "outdoor", rotation: 0 },
+  { id: 1788626555460447, label: "P2", x: 22.5, y: 20, shape: "square", seats: 4, area: "outdoor", rotation: 0 },
+  { id: 1788626566701800, label: "P3", x: 40, y: 30, shape: "square", seats: 4, area: "outdoor", rotation: 0 },
+  { id: 1788626572285110, label: "P4", x: 22.5, y: 40, shape: "square", seats: 4, area: "outdoor", rotation: 0 },
+  { id: 1788626737976753, label: "P5", x: 52.5, y: 42.5, shape: "square", seats: 4, area: "outdoor", rotation: 0 },
+  { id: 1788626746002482, label: "P6", x: 22.5, y: 57.5, shape: "square", seats: 4, area: "outdoor", rotation: 0 },
+  { id: 1788626752102023, label: "P7", x: 55, y: 57.5, shape: "square", seats: 4, area: "outdoor", rotation: 0 },
+  { id: 1788626762677170, label: "P9", x: 27.5, y: 85, shape: "square", seats: 4, area: "outdoor", rotation: 0 },
+  { id: 1788626770827989, label: "P10", x: 62.5, y: 85, shape: "square", seats: 4, area: "outdoor", rotation: 0 },
+  { id: 1788627001827859, label: "P8", x: 45, y: 67.5, shape: "square", seats: 4, area: "outdoor", rotation: 0 },
 ];
 
 export const savedBarChairs: BarChair[] = [
@@ -112,7 +122,34 @@ export const savedBarChairs: BarChair[] = [
   { id: 10, label: "B10", x: 17.5, y: 82.5 },
 ];
 
-export const savedFloorObjects: FloorObject[] = [];
+export const savedFloorObjects: FloorObject[] = [
+  { id: 1788626398127564, type: "bush", x: 92.5, y: 5, area: "outdoor", rotation: 0 },
+  { id: 1788626411561153, type: "bush", x: 82.5, y: 5, area: "outdoor", rotation: 0 },
+  { id: 1788626414619291, type: "bush", x: 72.5, y: 5, area: "outdoor", rotation: 0 },
+  { id: 1788626417252379, type: "bush", x: 62.5, y: 5, area: "outdoor", rotation: 0 },
+  { id: 1788626419586001, type: "bush", x: 52.5, y: 5, area: "outdoor", rotation: 0 },
+  { id: 1788626422652979, type: "bush", x: 42.5, y: 5, area: "outdoor", rotation: 0 },
+  { id: 1788626425952172, type: "bush", x: 7.5, y: 20, area: "outdoor", rotation: 0 },
+  { id: 1788626431686037, type: "bush", x: 7.5, y: 27.5, area: "outdoor", rotation: 0 },
+  { id: 1788626435569355, type: "bush", x: 7.5, y: 35, area: "outdoor", rotation: 0 },
+  { id: 1788626439477767, type: "bush", x: 7.5, y: 42.5, area: "outdoor", rotation: 0 },
+  { id: 1788626441760762, type: "bush", x: 7.5, y: 50, area: "outdoor", rotation: 0 },
+  { id: 1788626444211737, type: "bush", x: 7.5, y: 57.5, area: "outdoor", rotation: 0 },
+  { id: 1788626446360366, type: "bush", x: 7.5, y: 87.5, area: "outdoor", rotation: 0 },
+  { id: 1788626446510529, type: "bush", x: 7.5, y: 80, area: "outdoor", rotation: 0 },
+  { id: 1788626446669167, type: "bush", x: 7.5, y: 72.5, area: "outdoor", rotation: 0 },
+  { id: 1788626446835465, type: "bush", x: 7.5, y: 65, area: "outdoor", rotation: 0 },
+  { id: 1788626456735883, type: "bush", x: 7.5, y: 95, area: "outdoor", rotation: 0 },
+  { id: 1788626462777790, type: "bush", x: 20, y: 95, area: "outdoor", rotation: 0 },
+  { id: 1788626465660561, type: "bush", x: 32.5, y: 95, area: "outdoor", rotation: 0 },
+  { id: 1788626469319171, type: "bush", x: 45, y: 95, area: "outdoor", rotation: 0 },
+  { id: 1788626484752909, type: "bush", x: 57.5, y: 95, area: "outdoor", rotation: 0 },
+  { id: 1788626489702272, type: "bush", x: 70, y: 95, area: "outdoor", rotation: 0 },
+  { id: 1788626521443313, type: "bush", x: 85, y: 95, area: "outdoor", rotation: 0 },
+  { id: 1788626530343723, type: "firepit", x: 37.5, y: 47.5, area: "outdoor", rotation: 90 },
+  { id: 1788626537518296, type: "firepit", x: 45, y: 82.5, area: "outdoor", rotation: 90 },
+  { id: 1788627113548616, type: "door", x: 97.5, y: 15, area: "outdoor", rotation: 90 },
+];
 
 function createDailyServiceMetrics(dayKey = ""): DailyServiceMetrics {
   return {
