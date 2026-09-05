@@ -202,10 +202,14 @@ export default function Home() {
   useEffect(() => {
     setClock(new Date());
     const previousViewSetting = window.localStorage.getItem("mybites-view-flipped") === "true";
-    setFlippedViews({
-      indoor: window.localStorage.getItem("mybites-view-flipped-indoor") === "true" || (window.localStorage.getItem("mybites-view-flipped-indoor") === null && previousViewSetting),
-      outdoor: window.localStorage.getItem("mybites-view-flipped-outdoor") === "true" || (window.localStorage.getItem("mybites-view-flipped-outdoor") === null && previousViewSetting),
-    });
+    const indoorViewSetting = window.localStorage.getItem("mybites-view-flipped-indoor");
+    const outdoorViewSetting = window.localStorage.getItem("mybites-view-flipped-outdoor");
+    const flipped = indoorViewSetting !== null
+      ? indoorViewSetting === "true"
+      : outdoorViewSetting !== null
+        ? outdoorViewSetting === "true"
+        : previousViewSetting;
+    setFlippedViews({ indoor: flipped, outdoor: flipped });
     setShowAverages(window.localStorage.getItem("mybites-show-averages") === "true");
     const interval = window.setInterval(() => {
       setTick((value) => value + 1);
@@ -326,7 +330,10 @@ export default function Home() {
   const selectedFloorY = selectedTable?.y ?? selectedChair?.y ?? 50;
   const selectedViewX = viewFlipped ? 100 - selectedFloorX : selectedFloorX;
   const selectedViewY = viewFlipped ? 100 - selectedFloorY : selectedFloorY;
-  const selectedCombinedX = selectedArea === "indoor" ? selectedViewX * 0.7 : 70 + selectedViewX * 0.3;
+  const patioOnLeft = !flippedViews.indoor;
+  const selectedCombinedX = patioOnLeft
+    ? selectedArea === "outdoor" ? selectedViewX * 0.3 : 30 + selectedViewX * 0.7
+    : selectedArea === "indoor" ? selectedViewX * 0.7 : 70 + selectedViewX * 0.3;
   const selectedTicket = selectedChair
     ? visibleTickets.find((ticket) => ticket.zone === "Bar" && ticket.table === selectedChair.label)
     : visibleTickets.find((ticket) => ticket.id === selectedId);
@@ -498,10 +505,10 @@ export default function Home() {
     commitOperation({ type: "resetDailyService", dayKey: serviceDayKey(new Date()) });
   }
 
-  function toggleViewRotation(area: Area) {
+  function toggleViewRotation() {
     setRotationAnimating(true);
     setFlippedViews((current) => {
-      const flipped = !current[area];
+      const flipped = !current.indoor;
       const next = { indoor: flipped, outdoor: flipped };
       window.localStorage.setItem("mybites-view-flipped", String(flipped));
       window.localStorage.setItem("mybites-view-flipped-indoor", String(flipped));
@@ -717,7 +724,7 @@ export default function Home() {
               aria-label="Indoor and patio restaurant floor plan"
               data-editing={editMode ? "true" : "false"}
             >
-              <div className="room-grid">
+              <div className={`room-grid${patioOnLeft ? " patio-left" : ""}`}>
                 {(["indoor", "outdoor"] as Area[]).map((area) => {
                   const areaTables = floorTables.filter((table) => table.area === area);
                   const areaObjects = floorObjects.filter((object) => object.area === area);
@@ -860,16 +867,16 @@ export default function Home() {
                         </button>;
                       })}
                     </div>
-                    <button
-                      className="rotate-view-button"
-                      onClick={(event) => { event.stopPropagation(); setActiveArea(area); toggleViewRotation(area); }}
-                      aria-label={areaFlipped ? "Rotate both rooms upright" : "Rotate both rooms upside down"}
-                      aria-pressed={areaFlipped}
-                      title="Rotate both rooms 180 degrees"
-                    >↻</button>
                   </section>;
                 })}
               </div>
+              <button
+                className="rotate-view-button"
+                onClick={(event) => { event.stopPropagation(); toggleViewRotation(); }}
+                aria-label={flippedViews.indoor ? "Rotate floor upright" : "Rotate floor upside down"}
+                aria-pressed={flippedViews.indoor}
+                title="Rotate floor 180 degrees"
+              >↻</button>
 
               {selectedObjectKey && (selectedTable || selectedChair) && <section
                 className={`selected-panel selection-dialog floor-popover ${(selectedCombinedX > 58) ? "opens-left" : "opens-right"}`}
