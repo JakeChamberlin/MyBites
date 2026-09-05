@@ -78,6 +78,7 @@ export type StateOperation =
   | { type: "deleteChair"; chairId: number }
   | { type: "upsertObject"; object: FloorObject }
   | { type: "deleteObject"; objectId: number }
+  | { type: "clearArea"; area: Area }
   | { type: "setStatus"; objectKey: string; dayKey: string; status: StatusOverride }
   | { type: "completeService"; objectKey: string; dayKey: string; customers: number }
   | { type: "resetDailyService"; dayKey: string }
@@ -97,16 +98,6 @@ export const savedFloorTables: FloorTable[] = [
   { id: 9, label: "104", x: 12.5, y: 72.5, shape: "square", seats: 2, area: "indoor", rotation: 90 },
   { id: 10, label: "204", x: 12.5, y: 55, shape: "square", seats: 2, area: "indoor", rotation: 90 },
   { id: 11, label: "303", x: 12.5, y: 35, shape: "booth", seats: 4, area: "indoor", rotation: 90 },
-  { id: 12, label: "12", x: 12.5, y: 67.5, shape: "square", seats: 2, area: "outdoor", rotation: 90 },
-  { id: 13, label: "13", x: 7.5, y: 57.5, shape: "square", seats: 2, area: "outdoor", rotation: 90 },
-  { id: 14, label: "14", x: 17.5, y: 57.5, shape: "square", seats: 2, area: "outdoor", rotation: 270 },
-  { id: 15, label: "15", x: 12.5, y: 47.5, shape: "square", seats: 2, area: "outdoor", rotation: 90 },
-  { id: 16, label: "16", x: 45, y: 57.5, shape: "square", seats: 2, area: "outdoor", rotation: 90 },
-  { id: 17, label: "17", x: 35, y: 45, shape: "square", seats: 2, area: "outdoor", rotation: 90 },
-  { id: 18, label: "18", x: 47.5, y: 75, shape: "square", seats: 2, area: "outdoor", rotation: 90 },
-  { id: 19, label: "19", x: 75, y: 37.5, shape: "square", seats: 2, area: "outdoor", rotation: 90 },
-  { id: 20, label: "20", x: 67.5, y: 67.5, shape: "square", seats: 2, area: "outdoor", rotation: 90 },
-  { id: 21, label: "21", x: 87.5, y: 50, shape: "square", seats: 2, area: "outdoor", rotation: 90 },
 ];
 
 export const savedBarChairs: BarChair[] = [
@@ -122,30 +113,7 @@ export const savedBarChairs: BarChair[] = [
   { id: 10, label: "B10", x: 17.5, y: 82.5 },
 ];
 
-export const savedFloorObjects: FloorObject[] = [
-  { id: 1, type: "bush", x: 5, y: 90, area: "outdoor", rotation: 0 },
-  { id: 2, type: "bush", x: 12.5, y: 90, area: "outdoor", rotation: 0 },
-  { id: 3, type: "bush", x: 20, y: 90, area: "outdoor", rotation: 0 },
-  { id: 4, type: "bush", x: 27.5, y: 90, area: "outdoor", rotation: 0 },
-  { id: 5, type: "bush", x: 35, y: 90, area: "outdoor", rotation: 0 },
-  { id: 6, type: "firepit", x: 30, y: 57.5, area: "outdoor", rotation: 0 },
-  { id: 7, type: "firepit", x: 72.5, y: 50, area: "outdoor", rotation: 0 },
-  { id: 8, type: "bush", x: 42.5, y: 90, area: "outdoor", rotation: 0 },
-  { id: 9, type: "bush", x: 50, y: 90, area: "outdoor", rotation: 0 },
-  { id: 10, type: "bush", x: 57.5, y: 90, area: "outdoor", rotation: 0 },
-  { id: 11, type: "bush", x: 65, y: 90, area: "outdoor", rotation: 0 },
-  { id: 12, type: "bush", x: 72.5, y: 90, area: "outdoor", rotation: 0 },
-  { id: 13, type: "bush", x: 80, y: 90, area: "outdoor", rotation: 0 },
-  { id: 14, type: "bush", x: 87.5, y: 90, area: "outdoor", rotation: 0 },
-  { id: 15, type: "bush", x: 95, y: 90, area: "outdoor", rotation: 0 },
-  { id: 16, type: "bush", x: 95, y: 80, area: "outdoor", rotation: 0 },
-  { id: 17, type: "bush", x: 95, y: 70, area: "outdoor", rotation: 0 },
-  { id: 18, type: "bush", x: 95, y: 60, area: "outdoor", rotation: 0 },
-  { id: 19, type: "bush", x: 95, y: 50, area: "outdoor", rotation: 0 },
-  { id: 20, type: "bush", x: 95, y: 40, area: "outdoor", rotation: 0 },
-  { id: 21, type: "bush", x: 95, y: 30, area: "outdoor", rotation: 0 },
-  { id: 22, type: "bush", x: 95, y: 20, area: "outdoor", rotation: 0 },
-];
+export const savedFloorObjects: FloorObject[] = [];
 
 function createDailyServiceMetrics(dayKey = ""): DailyServiceMetrics {
   return {
@@ -251,6 +219,13 @@ export function applyStateOperation(state: SharedFloorState, operation: StateOpe
     case "deleteObject":
       next.floorObjects = next.floorObjects.filter((object) => object.id !== operation.objectId);
       break;
+    case "clearArea": {
+      const removedTableIds = new Set(next.floorTables.filter((table) => table.area === operation.area).map((table) => table.id));
+      next.floorTables = next.floorTables.filter((table) => table.area !== operation.area);
+      next.floorObjects = next.floorObjects.filter((object) => object.area !== operation.area);
+      for (const tableId of removedTableIds) delete next.statusOverrides[`table:${tableId}`];
+      break;
+    }
     case "setStatus": {
       if (next.dailyService.dayKey !== operation.dayKey) next.dailyService = createDailyServiceMetrics(operation.dayKey);
       const yearKey = operation.dayKey.slice(0, 4);
