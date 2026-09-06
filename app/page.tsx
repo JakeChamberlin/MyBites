@@ -57,6 +57,10 @@ function shortStatusLabel(state: ServiceState) {
   return statusOptions.find((option) => option.state === state)?.shortLabel ?? state;
 }
 
+function displayedStatusLabel(state: ServiceState, paid = false) {
+  return state === "plating" && paid ? "Served" : statusLabel(state);
+}
+
 function urgency(seconds: number) {
   if (seconds >= 900) return "critical";
   if (seconds >= 600) return "late";
@@ -332,6 +336,7 @@ export default function Home() {
   const selectedObjectKey = selectedChair ? `chair:${selectedChair.id}` : selectedTable ? `table:${selectedTable.id}` : null;
   const selectedOverride = selectedObjectKey ? statusOverrides[selectedObjectKey] : undefined;
   const selectedState = selectedOverride?.state ?? tableState(selectedTicket, 0);
+  const selectedPaid = selectedState === "plating" && selectedOverride?.paid === true;
   const selectedElapsed = selectedOverride
     ? Math.max(0, Math.floor(((clock?.getTime() ?? selectedOverride.startedAt) - selectedOverride.startedAt) / 1000))
     : selectedTicket?.elapsedSeconds ?? 0;
@@ -549,7 +554,19 @@ export default function Home() {
       categoryStartedAt: selectedOverride && waitCategory(selectedOverride.state) === waitCategory(state)
         ? selectedOverride.categoryStartedAt ?? selectedOverride.startedAt
         : now,
+      paid: state === "plating" ? selectedOverride?.paid : undefined,
     };
+    statusOverridesRef.current = { ...statusOverridesRef.current, [selectedObjectKey]: status };
+    setStatusOverrides(statusOverridesRef.current);
+    commitOperation({ type: "setStatus", objectKey: selectedObjectKey, dayKey: serviceDayKey(new Date()), status });
+  }
+
+  function toggleSelectedPaid() {
+    if (!selectedObjectKey || selectedState !== "plating") return;
+    const now = currentTimestamp();
+    const status: StatusOverride = selectedOverride
+      ? { ...selectedOverride, paid: !selectedPaid }
+      : { state: "plating", startedAt: now, serviceStartedAt: now, categoryStartedAt: now, paid: true };
     statusOverridesRef.current = { ...statusOverridesRef.current, [selectedObjectKey]: status };
     setStatusOverrides(statusOverridesRef.current);
     commitOperation({ type: "setStatus", objectKey: selectedObjectKey, dayKey: serviceDayKey(new Date()), status });
@@ -807,10 +824,10 @@ export default function Home() {
                             finishMoving("chair", chair.id);
                           }}
                           onPointerCancel={() => finishMoving()}
-                          aria-label={`Bar seat ${chair.label}, ${ticket ? state : "clear"}${editMode ? ", drag to move" : ""}`}
+                          aria-label={`Bar seat ${chair.label}, ${override ? displayedStatusLabel(state, override.paid) : ticket ? statusLabel(state) : "clear"}${editMode ? ", drag to move" : ""}`}
                           aria-pressed={selectedChairId === chair.id}
                           data-editing={editMode ? "true" : "false"}
-                        ><span>{chair.label}</span>{state !== "clear" && <small>{state === "plating" ? "S" : state === "postflight" ? "PF" : state === "late" ? formatTimer(elapsed) : Math.floor(elapsed / 60)}</small>}</button>;
+                        >{state === "plating" && override?.paid && <span className="paid-marker chair-paid-marker" aria-label="Paid">$✓</span>}<span>{chair.label}</span>{state !== "clear" && <small>{state === "plating" ? override?.paid ? "SV" : "S" : state === "postflight" ? "PF" : state === "late" ? formatTimer(elapsed) : Math.floor(elapsed / 60)}</small>}</button>;
                       })}
 
                       {areaTables.map((table) => {
@@ -848,13 +865,14 @@ export default function Home() {
                             finishMoving("table", table.id);
                           }}
                           onPointerCancel={() => finishMoving()}
-                          aria-label={`Table ${table.label}, ${statusLabel(state)}`}
+                          aria-label={`Table ${table.label}, ${displayedStatusLabel(state, override?.paid)}`}
                           aria-pressed={selected}
                           data-editing={editMode ? "true" : "false"}
                         >
+                          {state === "plating" && override?.paid && <span className="paid-marker" aria-label="Paid">$✓</span>}
                           <span className="chair chair-a" /><span className="chair chair-b" />
                           {(table.shape === "booth" || table.seats >= 4) && <><span className="chair chair-c" /><span className="chair chair-d" /></>}
-                          <span className="table-copy"><span className="table-number">{table.label}</span><span className="table-time">{override ? state === "late" ? `FLY ${formatTimer(elapsed)}` : shortStatusLabel(state) : ticket ? ticket.status === "plating" ? "SERVING" : formatTimer(ticket.elapsedSeconds) : "CLEAR"}</span></span>
+                          <span className="table-copy"><span className="table-number">{table.label}</span><span className="table-time">{override ? state === "late" ? `FLY ${formatTimer(elapsed)}` : state === "plating" && override.paid ? "SERVED" : shortStatusLabel(state) : ticket ? ticket.status === "plating" ? "SERVING" : formatTimer(ticket.elapsedSeconds) : "CLEAR"}</span></span>
                         </button>;
                       })}
                     </div>
@@ -882,11 +900,12 @@ export default function Home() {
                 <button className="dialog-close" onClick={() => { setSelectedId(0); setSelectedChairId(null); }} aria-label="Close table details">×</button>
                 <div className="selected-header">
                   <div><p>Selected table</p><h2>{selectedTable?.label ?? selectedChair?.label ?? "—"}</h2></div>
-                  <span className={`status-chip ${selectedState}`}>{statusLabel(selectedState)}{selectedState !== "clear" && ` · ${formatTimer(selectedElapsed)}`}</span>
+                  <span className={`status-chip ${selectedState}`}>{displayedStatusLabel(selectedState, selectedPaid)}{selectedState !== "clear" && ` · ${formatTimer(selectedElapsed)}`}</span>
                 </div>
                 {!editMode && <div className="status-picker" aria-label="Set table status">
                   <strong>Set status</strong>
                   <div>{statusOptions.map((option) => <button key={option.state} className={`status-option ${option.state}${selectedState === option.state ? " active" : ""}`} onClick={() => setSelectedStatus(option.state)} aria-pressed={selectedState === option.state}><i />{option.label}</button>)}</div>
+                  <label className={`paid-toggle${selectedState !== "plating" ? " disabled" : ""}`}><input type="checkbox" checked={selectedPaid} disabled={selectedState !== "plating"} onChange={toggleSelectedPaid} /><span><strong>Paid</strong><small>Displays Served and stays in Serving tracking</small></span></label>
                 </div>}
                 {editMode && selectedTable && <div className="table-editor">
                   <label>Table name<input value={selectedTable.label} maxLength={4} onChange={(event) => updateSelectedTable({ label: event.target.value })} /></label>
@@ -904,7 +923,7 @@ export default function Home() {
                 </div>}
                 {selectedState !== "clear" ? <>
                   {selectedTicket && <div className="selected-meta"><span>{selectedTicket.guests} guests</span><span>{selectedTicket.zone}</span></div>}
-                  {!selectedTicket && <div className="manual-status-summary"><strong>{statusLabel(selectedState)}</strong><span>Status set for this table</span></div>}
+                  {!selectedTicket && <div className="manual-status-summary"><strong>{displayedStatusLabel(selectedState, selectedPaid)}</strong><span>Status set for this table</span></div>}
                   {selectedTicket && (selectedTicket.status === "ready" ? <button className="primary-action" onClick={() => markServed(selectedTicket)}>✓ Mark table served</button> : <button className="primary-action plating-action" onClick={() => markReady(selectedTicket.id)}>Move to ready</button>)}
                 </> : <div className="clear-table"><span>✓</span><h3>Table is clear</h3><p>No service tasks are waiting for this table.</p></div>}
               </section>}
