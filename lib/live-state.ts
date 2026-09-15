@@ -67,6 +67,7 @@ export type SharedFloorState = {
   floorObjects: FloorObject[];
   statusOverrides: Record<string, StatusOverride>;
   dailyService: DailyServiceMetrics;
+  dailyHistory: Record<string, DailyServiceMetrics>;
   yearlyService: YearlyServiceMetrics;
   version: number;
   updatedAt: number;
@@ -244,6 +245,7 @@ export const emptySharedState: SharedFloorState = {
     postFlightSeconds: 0,
     postFlightSamples: 0,
   },
+  dailyHistory: {},
   yearlyService: {
     yearKey: "2026",
     greetingServingSeconds: 30840,
@@ -264,6 +266,7 @@ export function applyStateOperation(state: SharedFloorState, operation: StateOpe
     floorObjects: state.floorObjects.map((object) => ({ ...object })),
     statusOverrides: { ...state.statusOverrides },
     dailyService: { ...state.dailyService },
+    dailyHistory: Object.fromEntries(Object.entries(state.dailyHistory).map(([dayKey, metrics]) => [dayKey, { ...metrics }])),
     yearlyService: { ...state.yearlyService },
     version: state.version + 1,
     updatedAt: Date.now(),
@@ -300,7 +303,10 @@ export function applyStateOperation(state: SharedFloorState, operation: StateOpe
       next.floorObjects = next.floorObjects.filter((object) => object.id !== operation.objectId);
       break;
     case "setStatus": {
-      if (next.dailyService.dayKey !== operation.dayKey) next.dailyService = createDailyServiceMetrics(operation.dayKey);
+      if (next.dailyService.dayKey !== operation.dayKey) {
+        if (next.dailyService.dayKey) next.dailyHistory[next.dailyService.dayKey] = { ...next.dailyService };
+        next.dailyService = { ...(next.dailyHistory[operation.dayKey] ?? createDailyServiceMetrics(operation.dayKey)) };
+      }
       const yearKey = operation.dayKey.slice(0, 4);
       if (next.yearlyService.yearKey !== yearKey) next.yearlyService = createYearlyServiceMetrics(yearKey);
       const previousStatus = state.statusOverrides[operation.objectKey];
@@ -321,7 +327,8 @@ export function applyStateOperation(state: SharedFloorState, operation: StateOpe
     case "completeService": {
       const previousStatus = state.statusOverrides[operation.objectKey];
       if (next.dailyService.dayKey !== operation.dayKey) {
-        next.dailyService = createDailyServiceMetrics(operation.dayKey);
+        if (next.dailyService.dayKey) next.dailyHistory[next.dailyService.dayKey] = { ...next.dailyService };
+        next.dailyService = { ...(next.dailyHistory[operation.dayKey] ?? createDailyServiceMetrics(operation.dayKey)) };
       }
       const yearKey = operation.dayKey.slice(0, 4);
       if (next.yearlyService.yearKey !== yearKey) next.yearlyService = createYearlyServiceMetrics(yearKey);
@@ -356,6 +363,8 @@ export function applyStateOperation(state: SharedFloorState, operation: StateOpe
       }
       break;
   }
+
+  if (next.dailyService.dayKey) next.dailyHistory[next.dailyService.dayKey] = { ...next.dailyService };
 
   return next;
 }

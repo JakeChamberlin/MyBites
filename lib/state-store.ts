@@ -16,28 +16,34 @@ type SqlClient = {
 let postgresClientPromise: Promise<SqlClient> | null = null;
 let memoryState = emptySharedState;
 
+function parseDailyService(source: Partial<SharedFloorState["dailyService"]> | undefined, dayKey = ""): SharedFloorState["dailyService"] {
+  return {
+    dayKey: source?.dayKey ?? dayKey,
+    customersServed: source?.customersServed ?? 0,
+    completedServices: source?.completedServices ?? 0,
+    totalWaitSeconds: source?.totalWaitSeconds ?? 0,
+    greetingServingSeconds: source?.greetingServingSeconds ?? 0,
+    greetingServingSamples: source?.greetingServingSamples ?? 0,
+    readyToFlySeconds: source?.readyToFlySeconds ?? 0,
+    readyToFlySamples: source?.readyToFlySamples ?? 0,
+    postFlightSeconds: source?.postFlightSeconds ?? 0,
+    postFlightSamples: source?.postFlightSamples ?? 0,
+  };
+}
+
 function parseState(data: unknown, version: unknown, updatedAt: unknown): SharedFloorState {
   const parsed = typeof data === "string" ? JSON.parse(data) : data;
   const source = parsed && typeof parsed === "object" ? parsed as Partial<SharedFloorState> : {};
+  const dailyService = parseDailyService(source.dailyService);
+  const dailyHistory = Object.fromEntries(Object.entries(source.dailyHistory ?? {}).map(([dayKey, metrics]) => [dayKey, parseDailyService(metrics, dayKey)]));
+  if (dailyService.dayKey && !dailyHistory[dailyService.dayKey]) dailyHistory[dailyService.dayKey] = { ...dailyService };
   return {
     floorTables: Array.isArray(source.floorTables) ? source.floorTables : [],
     barChairs: Array.isArray(source.barChairs) ? source.barChairs : [],
     floorObjects: Array.isArray(source.floorObjects) ? source.floorObjects : [],
     statusOverrides: source.statusOverrides && typeof source.statusOverrides === "object" ? source.statusOverrides : {},
-    dailyService: source.dailyService && typeof source.dailyService === "object"
-      ? {
-        dayKey: source.dailyService.dayKey ?? "",
-        customersServed: source.dailyService.customersServed ?? 0,
-        completedServices: source.dailyService.completedServices ?? 0,
-        totalWaitSeconds: source.dailyService.totalWaitSeconds ?? 0,
-        greetingServingSeconds: source.dailyService.greetingServingSeconds ?? 0,
-        greetingServingSamples: source.dailyService.greetingServingSamples ?? 0,
-        readyToFlySeconds: source.dailyService.readyToFlySeconds ?? 0,
-        readyToFlySamples: source.dailyService.readyToFlySamples ?? 0,
-        postFlightSeconds: source.dailyService.postFlightSeconds ?? 0,
-        postFlightSamples: source.dailyService.postFlightSamples ?? 0,
-      }
-      : { dayKey: "", customersServed: 0, completedServices: 0, totalWaitSeconds: 0, greetingServingSeconds: 0, greetingServingSamples: 0, readyToFlySeconds: 0, readyToFlySamples: 0, postFlightSeconds: 0, postFlightSamples: 0 },
+    dailyService,
+    dailyHistory,
     yearlyService: source.yearlyService && typeof source.yearlyService === "object"
       ? {
         yearKey: source.yearlyService.yearKey ?? "",
