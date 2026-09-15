@@ -69,6 +69,7 @@ export type SharedFloorState = {
   dailyService: DailyServiceMetrics;
   dailyHistory: Record<string, DailyServiceMetrics>;
   yearlyService: YearlyServiceMetrics;
+  metricsPolicyVersion: number;
   version: number;
   updatedAt: number;
 };
@@ -187,8 +188,16 @@ function waitCategory(state: ServiceState) {
   return null;
 }
 
+const MAX_TRACKED_WAIT_SECONDS = 2 * 60 * 60;
+
+function trackedWaitSeconds(startedAt: number, endedAt: number) {
+  const seconds = Math.max(0, Math.floor((endedAt - startedAt) / 1000));
+  return seconds <= MAX_TRACKED_WAIT_SECONDS ? seconds : null;
+}
+
 function recordCategoryWait(metrics: DailyServiceMetrics | YearlyServiceMetrics, status: StatusOverride, endedAt: number) {
-  const seconds = Math.max(0, Math.floor((endedAt - (status.categoryStartedAt ?? status.startedAt)) / 1000));
+  const seconds = trackedWaitSeconds(status.categoryStartedAt ?? status.startedAt, endedAt);
+  if (seconds === null) return;
   const category = waitCategory(status.state);
   if (category === "ready") {
     metrics.readyToFlySeconds += seconds;
@@ -248,13 +257,14 @@ export const emptySharedState: SharedFloorState = {
   dailyHistory: {},
   yearlyService: {
     yearKey: "2026",
-    greetingServingSeconds: 30840,
-    greetingServingSamples: 28,
-    readyToFlySeconds: 9526,
-    readyToFlySamples: 26,
-    postFlightSeconds: 8938,
-    postFlightSamples: 15,
+    greetingServingSeconds: 0,
+    greetingServingSamples: 0,
+    readyToFlySeconds: 0,
+    readyToFlySamples: 0,
+    postFlightSeconds: 0,
+    postFlightSamples: 0,
   },
+  metricsPolicyVersion: 1,
   version: 462,
   updatedAt: 1788708789589,
 };
@@ -268,6 +278,7 @@ export function applyStateOperation(state: SharedFloorState, operation: StateOpe
     dailyService: { ...state.dailyService },
     dailyHistory: Object.fromEntries(Object.entries(state.dailyHistory).map(([dayKey, metrics]) => [dayKey, { ...metrics }])),
     yearlyService: { ...state.yearlyService },
+    metricsPolicyVersion: state.metricsPolicyVersion,
     version: state.version + 1,
     updatedAt: Date.now(),
   };
@@ -336,8 +347,11 @@ export function applyStateOperation(state: SharedFloorState, operation: StateOpe
         recordCategoryWait(next.dailyService, previousStatus, next.updatedAt);
         recordCategoryWait(next.yearlyService, previousStatus, next.updatedAt);
         next.dailyService.customersServed += Math.max(1, Math.round(operation.customers));
-        next.dailyService.completedServices += 1;
-        next.dailyService.totalWaitSeconds += Math.max(0, Math.floor((next.updatedAt - (previousStatus.serviceStartedAt ?? previousStatus.startedAt)) / 1000));
+        const totalServiceSeconds = trackedWaitSeconds(previousStatus.serviceStartedAt ?? previousStatus.startedAt, next.updatedAt);
+        if (totalServiceSeconds !== null) {
+          next.dailyService.completedServices += 1;
+          next.dailyService.totalWaitSeconds += totalServiceSeconds;
+        }
       }
       next.statusOverrides[operation.objectKey] = { state: "clear", startedAt: next.updatedAt, categoryStartedAt: next.updatedAt };
       break;

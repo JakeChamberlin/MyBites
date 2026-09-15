@@ -31,12 +31,43 @@ function parseDailyService(source: Partial<SharedFloorState["dailyService"]> | u
   };
 }
 
+function resetDailyAverages(metrics: SharedFloorState["dailyService"]): SharedFloorState["dailyService"] {
+  return {
+    ...metrics,
+    completedServices: 0,
+    totalWaitSeconds: 0,
+    greetingServingSeconds: 0,
+    greetingServingSamples: 0,
+    readyToFlySeconds: 0,
+    readyToFlySamples: 0,
+    postFlightSeconds: 0,
+    postFlightSamples: 0,
+  };
+}
+
 function parseState(data: unknown, version: unknown, updatedAt: unknown): SharedFloorState {
   const parsed = typeof data === "string" ? JSON.parse(data) : data;
   const source = parsed && typeof parsed === "object" ? parsed as Partial<SharedFloorState> : {};
-  const dailyService = parseDailyService(source.dailyService);
-  const dailyHistory = Object.fromEntries(Object.entries(source.dailyHistory ?? {}).map(([dayKey, metrics]) => [dayKey, parseDailyService(metrics, dayKey)]));
+  let dailyService = parseDailyService(source.dailyService);
+  let dailyHistory = Object.fromEntries(Object.entries(source.dailyHistory ?? {}).map(([dayKey, metrics]) => [dayKey, parseDailyService(metrics, dayKey)]));
   if (dailyService.dayKey && !dailyHistory[dailyService.dayKey]) dailyHistory[dailyService.dayKey] = { ...dailyService };
+  let yearlyService = source.yearlyService && typeof source.yearlyService === "object"
+    ? {
+      yearKey: source.yearlyService.yearKey ?? "",
+      greetingServingSeconds: source.yearlyService.greetingServingSeconds ?? 0,
+      greetingServingSamples: source.yearlyService.greetingServingSamples ?? 0,
+      readyToFlySeconds: source.yearlyService.readyToFlySeconds ?? 0,
+      readyToFlySamples: source.yearlyService.readyToFlySamples ?? 0,
+      postFlightSeconds: source.yearlyService.postFlightSeconds ?? 0,
+      postFlightSamples: source.yearlyService.postFlightSamples ?? 0,
+    }
+    : { yearKey: "", greetingServingSeconds: 0, greetingServingSamples: 0, readyToFlySeconds: 0, readyToFlySamples: 0, postFlightSeconds: 0, postFlightSamples: 0 };
+  const metricsPolicyVersion = source.metricsPolicyVersion ?? 0;
+  if (metricsPolicyVersion < 1) {
+    dailyService = resetDailyAverages(dailyService);
+    dailyHistory = Object.fromEntries(Object.entries(dailyHistory).map(([dayKey, metrics]) => [dayKey, resetDailyAverages(metrics)]));
+    yearlyService = { yearKey: yearlyService.yearKey, greetingServingSeconds: 0, greetingServingSamples: 0, readyToFlySeconds: 0, readyToFlySamples: 0, postFlightSeconds: 0, postFlightSamples: 0 };
+  }
   return {
     floorTables: Array.isArray(source.floorTables) ? source.floorTables : [],
     barChairs: Array.isArray(source.barChairs) ? source.barChairs : [],
@@ -44,17 +75,8 @@ function parseState(data: unknown, version: unknown, updatedAt: unknown): Shared
     statusOverrides: source.statusOverrides && typeof source.statusOverrides === "object" ? source.statusOverrides : {},
     dailyService,
     dailyHistory,
-    yearlyService: source.yearlyService && typeof source.yearlyService === "object"
-      ? {
-        yearKey: source.yearlyService.yearKey ?? "",
-        greetingServingSeconds: source.yearlyService.greetingServingSeconds ?? 0,
-        greetingServingSamples: source.yearlyService.greetingServingSamples ?? 0,
-        readyToFlySeconds: source.yearlyService.readyToFlySeconds ?? 0,
-        readyToFlySamples: source.yearlyService.readyToFlySamples ?? 0,
-        postFlightSeconds: source.yearlyService.postFlightSeconds ?? 0,
-        postFlightSamples: source.yearlyService.postFlightSamples ?? 0,
-      }
-      : { yearKey: "", greetingServingSeconds: 0, greetingServingSamples: 0, readyToFlySeconds: 0, readyToFlySamples: 0, postFlightSeconds: 0, postFlightSamples: 0 },
+    yearlyService,
+    metricsPolicyVersion: 1,
     version: Number(version ?? source.version ?? 0),
     updatedAt: Number(updatedAt ?? source.updatedAt ?? 0),
   };
